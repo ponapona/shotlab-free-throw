@@ -1,0 +1,54 @@
+// Generated from config/defaults.json. Run npm run config after editing.
+export const SETTINGS = {
+  "app_version": "0.1.0",
+  "schema_version": "shotlab/1.0",
+  "model": {
+    "name": "MediaPipe Pose Landmarker Heavy float16",
+    "url": "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task",
+    "sha256": "64437af838a65d18e5ba7a0d39b465540069bc8aae8308de3e318aad31fcbc7b",
+    "sdk_web": "1.1.1"
+  },
+  "sampling": {
+    "browser_fps": 30,
+    "choices": [
+      15,
+      30
+    ],
+    "crop_height_px": 512,
+    "num_poses": 1
+  },
+  "confidence": {
+    "detection": 0.45,
+    "presence": 0.45,
+    "tracking": 0.5,
+    "landmark": 0.5
+  },
+  "filter": {
+    "min_cutoff_hz": 3,
+    "beta": 2,
+    "derivative_cutoff_hz": 1,
+    "reset_gap_s": 0.15
+  },
+  "timing": {
+    "velocity_max_gap_s": 0.12,
+    "lookup_max_age_s": 0.16
+  },
+  "ballistics": {
+    "search_window_s": 1.8,
+    "min_observations": 8,
+    "ransac_trials": 900,
+    "random_seed": 1729,
+    "min_residual_px": 3,
+    "residual_height_fraction": 0.015
+  },
+  "shot_candidates": {
+    "max_gap_s": 0.28,
+    "min_high_duration_s": 0.12,
+    "min_separation_s": 2.5,
+    "start_lead_s": 1,
+    "drive_lead_s": 0.35,
+    "release_offset_s": 0.08,
+    "end_tail_s": 1.2,
+    "wrist_margin_norm": 0.035
+  }
+};

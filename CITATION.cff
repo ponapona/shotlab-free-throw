@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software, cite the exact release and record your analysis settings."
+title: "ShotLab: Free-throw motion analysis"
+type: software
+authors:
+  - name: "ShotLab contributors"
+version: 0.1.0
+date-released: 2026-10-23
+license: MIT
