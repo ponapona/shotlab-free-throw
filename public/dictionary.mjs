@@ -7,6 +7,7 @@ import {
   shotRows,
   landmarkRows,
 } from "./engine.mjs";
+import { ballRows } from "./ball-tracking.mjs";
 const D = (
   name,
   description,
@@ -15,6 +16,64 @@ const D = (
   note = "",
 ) => ({ name, description, unit, missing, note });
 const COMMON = {
+  ball_auto_x_px: D(
+    "自動検出のX",
+    "手修正前の追跡候補の中心X。元画像の左端が0。",
+    "px",
+  ),
+  ball_auto_y_px: D(
+    "自動検出のY",
+    "手修正前の追跡候補の中心Y。元画像の上端が0、下向き正。",
+    "px",
+  ),
+  ball_auto_score: D(
+    "自動検出スコア",
+    "EfficientDetのsports ball分類スコア。手修正で上書きしない。",
+    "0–1",
+    "空欄＝自動観測なし",
+    "位置精度や正解確率ではない。",
+  ),
+  ball_auto_track_id: D(
+    "自動追跡の区間番号",
+    "追跡が途切れ再取得すると新しい番号。選手IDやシュートIDではない。",
+    "番号",
+  ),
+  ball_candidate_count: D(
+    "ボール検出候補数",
+    "閾値と大きさの条件を通過したsports ball候補数。全候補の座標はセッションJSONに保存。",
+    "個",
+    "空欄＝未実行、0＝候補なし",
+  ),
+  ball_tracking_status: D(
+    "自動追跡の状態",
+    "observed＝採用候補、missing＝未検出、ambiguous＝候補を絞れない、rejected＝追跡条件外、not_run＝未実行。",
+    "カテゴリ",
+  ),
+  ball_edit: D(
+    "ボールの手修正",
+    "none＝修正なし、point＝人が中心を指定、missing＝人が欠測に指定。",
+    "カテゴリ",
+  ),
+  ball_edited_at: D(
+    "ボール修正日時",
+    "最後にこのサンプルを手修正した日時（ISO 8601）。",
+    "日時",
+  ),
+  ball_source: D(
+    "採用座標の由来",
+    "efficientdet_lite2＝自動候補、manual＝手修正。旧セッションは旧方式名。",
+    "文字列",
+  ),
+  ball_x_norm: D(
+    "ボール採用X・正規化",
+    "手修正があれば手修正、なければ自動候補のXを元画像幅で割った値。",
+    "画像幅比",
+  ),
+  ball_y_norm: D(
+    "ボール採用Y・正規化",
+    "手修正があれば手修正、なければ自動候補のYを元画像高さで割った値。下向き正。",
+    "画像高さ比",
+  ),
   source_sha256: D(
     "動画識別SHA-256",
     "解析元動画のSHA-256。複数CSVの対応確認に使う。",
@@ -138,24 +197,24 @@ const COMMON = {
   left_wrist_y_px: D("左手首のY座標", "左手首の画像Y座標。下向き正。", "px"),
   right_wrist_y_px: D("右手首のY座標", "右手首の画像Y座標。下向き正。", "px"),
   ball_x_px: D(
-    "ボール観測X",
-    "画像処理で得たボール候補の元のX座標。画像左端が0、右向き正。",
+    "ボール採用X",
+    "手修正があれば修正座標、なければ自動追跡候補のX。画像左端が0、右向き正。",
     "px",
     "空欄＝未観測",
-    "補正前の値を保持。候補点は誤検出を含みうる。",
+    "放物線補正前の値。自動検出の元座標はball.csvのball_auto_*列。",
   ),
   ball_y_px: D(
-    "ボール観測Y",
-    "画像処理で得たボール候補の元のY座標。画像上端が0、下向き正。",
+    "ボール採用Y",
+    "手修正があれば修正座標、なければ自動追跡候補のY。画像上端が0、下向き正。",
     "px",
     "空欄＝未観測",
-    "補正前の値を保持。候補点は誤検出を含みうる。",
+    "放物線補正前の値。自動検出の元座標はball.csvのball_auto_*列。",
   ),
   ball_visibility: D(
     "ボール観測の適合スコア",
-    "添付動画用の輪郭追跡の未校正スコア。姿勢モデルのvisibilityとは異なる。",
+    "自動候補の分類スコア。手修正の座標にはスコアを付けない。旧セッションでは旧追跡器の未校正スコア。",
     "0–1",
-    "空欄＝未観測",
+    "空欄＝未観測／手修正",
     "ボール位置の正確さを保証する確率ではない。",
   ),
   ball_x_px_corrected: D(
@@ -488,6 +547,8 @@ export function dictionaryRows() {
     ["frames.csv", frameRows(data, data.shots)[0]],
     ["shots.csv", shotRows(data, data.shots)[0]],
     ["landmarks.csv", landmarkRows(data)[0]],
+    ["body.csv", landmarkRows(data, { bodyOnly: true })[0]],
+    ["ball.csv", ballRows(data, data.shots)[0]],
   ].flatMap(([file, row]) =>
     Object.keys(row).map((column) => {
       const d = definition(column);

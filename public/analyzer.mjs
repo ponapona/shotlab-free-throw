@@ -1,5 +1,8 @@
 import { enrich, suggestShots, NAMES } from "./engine.mjs";
+import { sha256 } from "./file-hash.mjs";
 import { SETTINGS } from "./settings.mjs";
+import { analyzeBall } from "./ball-analyzer.mjs";
+import { correctBallistics } from "./ballistics.mjs";
 const asset = (p) => new URL(p, import.meta.url).href;
 const tick = () => new Promise((r) => setTimeout(r, 0));
 function event(el, name) {
@@ -27,6 +30,41 @@ function event(el, name) {
   });
 }
 export async function analyzeVideo(
+  file,
+  {
+    trackBall = true,
+    ballRoi = [0, 0, 1, 1],
+    onProgress = () => {},
+    signal,
+    ...poseOptions
+  } = {},
+) {
+  const posePart = trackBall ? 0.55 : 1;
+  const data = await analyzePose(file, {
+    ...poseOptions,
+    signal,
+    onProgress: (p, message) => onProgress(p * posePart, message),
+  });
+  if (trackBall) {
+    try {
+      await analyzeBall(file, data, {
+        roi: ballRoi,
+        signal,
+        onProgress: (p, message) =>
+          onProgress(posePart + p * (1 - posePart), message),
+      });
+    } catch (e) {
+      if (e.name === "AbortError") throw e;
+      data.meta.ball_detection = {
+        status: "error",
+        error: e.message,
+        roi: ballRoi,
+      };
+    }
+  } else data.meta.ball_detection = { status: "disabled", roi: ballRoi };
+  return correctBallistics(data);
+}
+async function analyzePose(
   file,
   {
     roi = [0, 0, 1, 1],
@@ -183,13 +221,7 @@ export async function analyzeVideo(
       );
       await tick();
     }
-    const sourceSha = [
-      ...new Uint8Array(
-        await crypto.subtle.digest("SHA-256", await file.arrayBuffer()),
-      ),
-    ]
-      .map((x) => x.toString(16).padStart(2, "0"))
-      .join("");
+    const sourceSha = await sha256(await file.arrayBuffer());
     const data = {
       schema: "shotlab/1.0",
       meta: {

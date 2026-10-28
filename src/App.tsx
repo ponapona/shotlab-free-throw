@@ -52,6 +52,9 @@ import {
   csv,
   validateShots,
 } from "../public/engine.mjs";
+import { sha256 } from "../public/file-hash.mjs";
+import BallTrajectory from "./BallTrajectory";
+import { ballRows } from "../public/ball-tracking.mjs";
 import { correctBallistics } from "../public/ballistics.mjs";
 import { dictionaryRows } from "../public/dictionary.mjs";
 import DATA_GUIDE from "../public/guide.mjs";
@@ -286,7 +289,7 @@ function Wave({
     </section>
   );
 }
-function Skeleton({ frame, mode, yaw, meta }) {
+function Skeleton({ frame, mode, yaw, meta, bodyOnly }) {
   const canvas = useRef(null);
   useEffect(() => {
     const el = canvas.current;
@@ -339,6 +342,7 @@ function Skeleton({ frame, mode, yaw, meta }) {
       ]);
     }
     for (const [a, b] of CONNECTIONS) {
+      if (bodyOnly && (!BODY.includes(a) || !BODY.includes(b))) continue;
       const low =
         Math.min(confidence(p[a]), confidence(p[b])) <
         (meta.analysis_settings ?? SETTINGS).confidence.landmark;
@@ -361,6 +365,7 @@ function Skeleton({ frame, mode, yaw, meta }) {
     }
     c.setLineDash([]);
     points.forEach((pt, i) => {
+      if (bodyOnly && !BODY.includes(i)) return;
       c.globalAlpha =
         confidence(p[i]) <
         (meta.analysis_settings ?? SETTINGS).confidence.landmark
@@ -375,12 +380,12 @@ function Skeleton({ frame, mode, yaw, meta }) {
       c.stroke();
     });
     c.globalAlpha = 1;
-  }, [frame, mode, yaw, meta]);
+  }, [frame, mode, yaw, meta, bodyOnly]);
   return (
     <canvas
       ref={canvas}
       className="skeleton-canvas"
-      aria-label="全身33点。低可視性は破線。"
+      aria-label={`${bodyOnly ? "主要16点" : "全33点"}。低可視性は破線。`}
     />
   );
 }
@@ -396,6 +401,9 @@ export default function Home() {
   const [selected, setSelected] = useState(1),
     [error, setError] = useState(""),
     [overlay, setOverlay] = useState(true),
+    [bodyOnly, setBodyOnly] = useState(true),
+    [ballOverlay, setBallOverlay] = useState(true),
+    [ballEditing, setBallEditing] = useState(false),
     [importOpen, setImportOpen] = useState(false),
     [exportOpen, setExportOpen] = useState(false),
     [helpOpen, setHelpOpen] = useState(false),
@@ -403,6 +411,9 @@ export default function Home() {
   const [file, setFile] = useState(null),
     [importSrc, setImportSrc] = useState(""),
     [roi, setRoi] = useState([0, 0, 1, 1]),
+    [ballRoi, setBallRoi] = useState([0, 0, 1, 1]),
+    [roiMode, setRoiMode] = useState("body"),
+    [trackBall, setTrackBall] = useState(true),
     [sample, setSample] = useState(String(SETTINGS.sampling.browser_fps)),
     [progress, setProgress] = useState(-1),
     [progressText, setProgressText] = useState(""),
@@ -495,9 +506,10 @@ export default function Home() {
   const toggle = () => {
     const v = video.current;
     if (!v) return;
-    if (v.paused)
+    if (v.paused) {
+      setBallEditing(false);
       v.play().catch(() => toast.error("再生ボタンをもう一度押してください"));
-    else v.pause();
+    } else v.pause();
   };
   const selectShot = (s) => {
     setSelected(s.id);
@@ -523,10 +535,10 @@ export default function Home() {
     el.height = data.meta.height;
     const c = el.getContext("2d");
     c.clearRect(0, 0, el.width, el.height);
-    if (!overlay) return;
-    if (frame?.s) {
+    if (overlay && frame?.s) {
       const p = frame.s;
       for (const [a, b] of CONNECTIONS) {
+        if (bodyOnly && (!BODY.includes(a) || !BODY.includes(b))) continue;
         c.strokeStyle =
           a % 2 === 1 && b % 2 === 1
             ? LEFT
@@ -547,6 +559,28 @@ export default function Home() {
     }
     c.globalAlpha = 1;
     c.setLineDash([]);
+    if (!ballOverlay) return;
+    // Raw observations stay visible even when a parabola cannot be fitted.
+    for (const f of data.frames) {
+      if (f.t > time || f.t < time - 2.5 || !f.ball) continue;
+      c.fillStyle = f.ball.source === "manual" ? LEFT : "#dce3e8";
+      c.beginPath();
+      c.arc(f.ball.x, f.ball.y, Math.max(2, el.width / 400), 0, Math.PI * 2);
+      c.fill();
+    }
+    if (frame?.ball) {
+      c.strokeStyle = frame.ball.source === "manual" ? LEFT : "#fff";
+      c.beginPath();
+      c.arc(
+        frame.ball.x,
+        frame.ball.y,
+        Math.max(5, frame.ball.r ?? 5),
+        0,
+        Math.PI * 2,
+      );
+      c.stroke();
+    }
+    c.setLineDash([5, 4]);
     const trail = data.frames.filter(
       (f) => f.t <= time && f.t > time - 2.5 && f.ball_corrected,
     );
@@ -570,12 +604,15 @@ export default function Home() {
       c.arc(b.x, b.y, 5, 0, Math.PI * 2);
       c.stroke();
     }
-  }, [data, frame, overlay, time]);
+  }, [data, frame, overlay, ballOverlay, bodyOnly, time]);
   const openFile = (f) => {
+    setError("");
     setImportError("");
     setFile(f);
     setImportSrc(URL.createObjectURL(f));
     setRoi([0, 0, 1, 1]);
+    setBallRoi([0, 0, 1, 1]);
+    setRoiMode("body");
     setImportOpen(true);
   };
   const analyze = async () => {
@@ -600,6 +637,8 @@ export default function Home() {
       const analyzeVideo = window.shotlabAnalyzeVideo;
       const d = await analyzeVideo(file, {
         roi,
+        ballRoi,
+        trackBall,
         fps: Number(sample),
         signal: controller.current.signal,
         onProgress: (p, text) => {
@@ -608,14 +647,24 @@ export default function Home() {
         },
       });
       setData(d);
+      setError("");
+      setBallEditing(false);
       setShots(d.shots);
       setSelected(d.shots[0]?.id ?? 1);
       setSrc(URL.createObjectURL(file));
       setTime(0);
       setImportOpen(false);
       toast.success(
-        `${d.frames.length.toLocaleString()}フレームを解析しました。シュート時刻と結果を確認してください。`,
+        `${d.frames.length.toLocaleString()}サンプルを解析しました。区間・結果・ボールを確認してください。`,
       );
+      if (d.meta.ball_detection?.status === "error")
+        toast.warning(
+          "身体の解析は完了。ボール自動検出は失敗しました。画面の説明を確認してください。",
+        );
+      else if (trackBall && !d.meta.ball_detection?.observed_frames)
+        toast.warning(
+          "ボールを自動検出できませんでした。映像をクリックして位置を追加できます。",
+        );
     } catch (e) {
       if (e.name !== "AbortError") {
         console.error("ShotLab import:", e);
@@ -668,11 +717,13 @@ export default function Home() {
       );
     } else {
       const rows =
-        kind === "frames"
-          ? frameRows(data, shots)
-          : kind === "shots"
-            ? shotRows(data, shots)
-            : landmarkRows(data, { bodyOnly: kind === "body" });
+        kind === "ball"
+          ? ballRows(data, shots)
+          : kind === "frames"
+            ? frameRows(data, shots)
+            : kind === "shots"
+              ? shotRows(data, shots)
+              : landmarkRows(data, { bodyOnly: kind === "body" });
       const table = kind === "body" ? "landmarks" : kind;
       download(
         name + "_" + kind + ".csv",
@@ -687,6 +738,7 @@ export default function Home() {
     toast.success("データを書き出しました");
   };
   const restore = async (f) => {
+    setImportError("");
     try {
       const d = JSON.parse(await f.text());
       if (
@@ -698,13 +750,7 @@ export default function Home() {
         throw new Error("ShotLabのセッションJSONを選択してください。");
       const source = importOpen ? file : null;
       if (source) {
-        const hash = [
-          ...new Uint8Array(
-            await crypto.subtle.digest("SHA-256", await source.arrayBuffer()),
-          ),
-        ]
-          .map((x) => x.toString(16).padStart(2, "0"))
-          .join("");
+        const hash = await sha256(await source.arrayBuffer());
         if (!d.meta.source_sha256 || hash !== d.meta.source_sha256)
           throw new Error("動画とセッションのSHA-256が一致しません。");
       } else if (
@@ -716,13 +762,18 @@ export default function Home() {
       validateShots(d.shots, d.meta.duration);
       enrich(d);
       setData(d);
+      setError("");
+      setBallEditing(false);
       setShots(d.shots);
       setSelected(d.shots[0]?.id ?? 1);
       setTime(0);
+      video.current?.pause();
       if (source) setSrc(URL.createObjectURL(source));
+      else if (video.current) video.current.currentTime = 0;
       setImportOpen(false);
       toast.success("再解析せずにセッションを復元しました");
     } catch (e) {
+      setImportError(e.message);
       toast.error(e.message);
     }
   };
@@ -763,13 +814,48 @@ export default function Home() {
     if (!drag.current) return;
     const [sx, sy] = drag.current;
     if (Math.abs(x - sx) > 0.03 && Math.abs(y - sy) > 0.03)
-      setRoi([
+      (roiMode === "ball" ? setBallRoi : setRoi)([
         Math.min(x, sx),
         Math.min(y, sy),
         Math.max(x, sx),
         Math.max(y, sy),
       ]);
     if (finish) drag.current = null;
+  };
+  const activeRoi = roiMode === "ball" ? ballRoi : roi;
+  const updateBall = (editValue) => {
+    if (!frame || !sourceData) return;
+    setData((prev) => ({
+      ...prev,
+      frames: prev.frames.map((f) => {
+        if (f.i !== frame.i) return f;
+        const next = { ...f };
+        if (!Object.prototype.hasOwnProperty.call(next, "ball_auto"))
+          next.ball_auto = f.ball ?? null;
+        if (editValue)
+          next.ball_edit = {
+            ...editValue,
+            edited_at: new Date().toISOString(),
+          };
+        else delete next.ball_edit;
+        return next;
+      }),
+    }));
+  };
+  const clickBall = (e) => {
+    if (!ballEditing || playing || !frame) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    updateBall({
+      kind: "point",
+      x: ((e.clientX - rect.left) / rect.width) * data.meta.width,
+      y: ((e.clientY - rect.top) / rect.height) * data.meta.height,
+    });
+  };
+  const startBallEdit = () => {
+    video.current?.pause();
+    if (!ballEditing && frame) seek(frame.t + 0.001);
+    setBallOverlay(true);
+    setBallEditing(!ballEditing);
   };
   return (
     <div className="app-shell">
@@ -871,7 +957,17 @@ export default function Home() {
               <span className="small-tag">SOURCE</span>
             </div>
             <div className="video-area">
-              <div className="video-wrap">
+              <div
+                className={`video-wrap ${ballEditing ? "ball-editing" : ""}`}
+                style={
+                  data
+                    ? {
+                        aspectRatio: `${data.meta.width} / ${data.meta.height}`,
+                      }
+                    : undefined
+                }
+                onClick={clickBall}
+              >
                 {!src && (
                   <div className="video-empty">
                     <Film size={38} />
@@ -978,10 +1074,82 @@ export default function Home() {
                 <Switch checked={overlay} onCheckedChange={setOverlay} />
                 骨格を重ねる
               </label>
+              <label>
+                <Switch
+                  checked={ballOverlay}
+                  onCheckedChange={setBallOverlay}
+                />
+                ボール軌道
+              </label>
               <span className="mono">
                 FRAME {String(frame?.i ?? 0).padStart(4, "0")}
               </span>
             </div>
+            {data && (
+              <div className="ball-editor">
+                <div className="ball-edit-actions">
+                  <button
+                    className={`button small ${ballEditing ? "primary" : ""}`}
+                    onClick={startBallEdit}
+                  >
+                    {ballEditing ? "位置の修正を終了" : "ボール位置を修正"}
+                  </button>
+                  <button
+                    className="button small"
+                    onClick={() => exportData("ball")}
+                  >
+                    軌道 CSV
+                  </button>
+                </div>
+                {ballEditing && (
+                  <>
+                    <p>
+                      一時停止中の映像でボールの中心をクリック。前後のフレームへ進めて修正します。見えないときは欠測にします。
+                    </p>
+                    <div className="ball-edit-actions">
+                      <button
+                        className="button small"
+                        onClick={() => updateBall({ kind: "missing" })}
+                        disabled={!frame}
+                      >
+                        この点を欠測に
+                      </button>
+                      <button
+                        className="button small"
+                        onClick={() => updateBall(null)}
+                        disabled={!frame?.ball_edit}
+                      >
+                        この点の修正を戻す
+                      </button>
+                    </div>
+                  </>
+                )}
+                <p className="ball-status" role="status">
+                  {frame?.ball_edit?.kind === "missing"
+                    ? "現在の点：手動で欠測に指定"
+                    : frame?.ball?.source === "manual"
+                      ? "現在の点：手修正"
+                      : frame?.ball
+                        ? "現在の点：自動検出候補（要確認）"
+                        : "現在の点：欠測"}
+                </p>
+                {data.meta.ball_detection?.status === "error" && (
+                  <p className="import-error" role="alert">
+                    ボール自動検出を完了できませんでした：
+                    {data.meta.ball_detection.error}。手動で位置を追加できます。
+                  </p>
+                )}
+                {data.meta.ball_detection?.status === "disabled" && (
+                  <p>ボール自動検出はオフです。手動で位置を追加できます。</p>
+                )}
+                <BallTrajectory
+                  data={data}
+                  shot={selectedShot}
+                  time={time}
+                  onSeek={seek}
+                />
+              </div>
+            )}
             <div className="capture-info">
               <div>
                 <span>現在の動作</span>
@@ -1029,9 +1197,10 @@ export default function Home() {
                 mode={mode}
                 yaw={yaw}
                 meta={data?.meta ?? { width: 640, height: 360 }}
+                bodyOnly={bodyOnly}
               />
               <div className="skeleton-top">
-                <span>33 LANDMARKS</span>
+                <span>{bodyOnly ? "16 MAIN POINTS" : "33 LANDMARKS"}</span>
                 <span className="mono">{mode === "2d" ? "2D" : "3D EST."}</span>
               </div>
               <div className="skeleton-bottom">
@@ -1066,6 +1235,42 @@ export default function Home() {
                 / 16 <small>主要関節</small>
               </span>
             </div>
+            <div
+              className="point-choice"
+              role="group"
+              aria-label="表示する身体の点"
+            >
+              <button
+                className={bodyOnly ? "active" : ""}
+                aria-pressed={bodyOnly}
+                onClick={() => setBodyOnly(true)}
+              >
+                主要16点
+              </button>
+              <button
+                className={!bodyOnly ? "active" : ""}
+                aria-pressed={!bodyOnly}
+                onClick={() => setBodyOnly(false)}
+              >
+                全33点
+              </button>
+            </div>
+            <div className="body-downloads">
+              <button
+                className="button small"
+                disabled={!data}
+                onClick={() => exportData("body")}
+              >
+                主要16点 CSV
+              </button>
+              <button
+                className="button small"
+                disabled={!data}
+                onClick={() => exportData("landmarks")}
+              >
+                全33点 CSV
+              </button>
+            </div>
             {mode === "3d" && (
               <div className="rotation">
                 <span>回転</span>
@@ -1079,7 +1284,8 @@ export default function Home() {
               </div>
             )}
             <p className="motion-note">
-              隠れた関節は推定です。破線部分の角度は欠測として扱います。
+              Google
+              MediaPipeで33点を推定し、標準表示は顔・指先を除く主要16点です。表示切替で元データは変わりません。隠れた関節は推定です。
             </p>
           </section>
           <section className="panel signal-panel">
@@ -1335,11 +1541,27 @@ export default function Home() {
           <DialogHeader>
             <DialogTitle>動画をインポート</DialogTitle>
             <DialogDescription>
-              対象選手の動作範囲をドラッグで囲んでください。腕・足を含む少し広めの枠にします。
+              「身体の範囲」は全身を、「ボールの範囲」は手元からリングまでの飛行範囲を囲みます。ボールは初期設定で映像全体を探します。
             </DialogDescription>
           </DialogHeader>
           {file && (
             <>
+              <div className="point-choice" role="group" aria-label="囲む範囲">
+                <button
+                  disabled={busy}
+                  className={roiMode === "body" ? "active" : ""}
+                  onClick={() => setRoiMode("body")}
+                >
+                  身体の範囲
+                </button>
+                <button
+                  disabled={busy}
+                  className={roiMode === "ball" ? "active" : ""}
+                  onClick={() => setRoiMode("ball")}
+                >
+                  ボールの範囲
+                </button>
+              </div>
               <div
                 className="import-video"
                 onPointerDown={(e) => {
@@ -1358,17 +1580,24 @@ export default function Home() {
                 <div
                   className="roi-box"
                   style={{
-                    left: `${roi[0] * 100}%`,
-                    top: `${roi[1] * 100}%`,
-                    width: `${(roi[2] - roi[0]) * 100}%`,
-                    height: `${(roi[3] - roi[1]) * 100}%`,
+                    left: `${activeRoi[0] * 100}%`,
+                    top: `${activeRoi[1] * 100}%`,
+                    width: `${(activeRoi[2] - activeRoi[0]) * 100}%`,
+                    height: `${(activeRoi[3] - activeRoi[1]) * 100}%`,
                   }}
                 />
-                <span className="roi-label">対象範囲</span>
+                <span className="roi-label">
+                  {roiMode === "ball" ? "ボールの飛行範囲" : "選手の動作範囲"}
+                </span>
               </div>
               <div className="import-meta">
                 <span>{file.name}</span>
-                <button onClick={() => setRoi([0, 0, 1, 1])} disabled={busy}>
+                <button
+                  onClick={() =>
+                    (roiMode === "ball" ? setBallRoi : setRoi)([0, 0, 1, 1])
+                  }
+                  disabled={busy}
+                >
                   枠をリセット
                 </button>
               </div>
@@ -1384,8 +1613,16 @@ export default function Home() {
                   label="解析サンプル数"
                 />
               </div>
+              <label className="ball-toggle">
+                <Switch
+                  checked={trackBall}
+                  disabled={busy}
+                  onCheckedChange={setTrackBall}
+                />
+                ボールも自動検出する
+              </label>
               <p className="helper-text">
-                全身33点を推定します。処理時間は動画長と端末性能に依存します。CPU版は原動画の全フレームを処理します。抽出後に時刻と結果を確認してください。新規動画のボール検出は未対応です。観測座標があるセッションでは飛行区間を放物線で補正します。
+                身体は33点を推定し、主要16点だけのCSVも保存できます。ボールは別モデルで追跡するため処理時間が増えます。小さい球・遮蔽・複数の球には誤検出や欠測があり、解析後に手修正できます。まず5〜10秒の動画でお試しください。
               </p>
               {busy && (
                 <div className="import-progress">
@@ -1423,7 +1660,7 @@ export default function Home() {
                     </button>
                     <button className="button primary" onClick={analyze}>
                       <ScanLine size={16} />
-                      全身解析を開始
+                      解析を開始
                     </button>
                   </>
                 )}
@@ -1457,14 +1694,20 @@ export default function Home() {
               [
                 "body",
                 "主要16点 CSV",
-                "顔・指先を除いた肩・肘・手首・股・膝・足など。",
+                "基本の分析用。左右の肩・肘・手首・股・膝・足首・かかと・つま先。",
                 Activity,
               ],
               [
                 "landmarks",
-                "全身33点 CSV",
-                "生座標・可視性・推定3D座標。",
+                "全33点 CSV",
+                "元データ保存用。顔・指先も含むMediaPipeの全点。",
                 Box,
+              ],
+              [
+                "ball",
+                "ボール軌道 CSV",
+                "自動候補・手修正・採用座標・放物線を別列で保存。",
+                Activity,
               ],
               [
                 "metadata",
@@ -1607,7 +1850,8 @@ export default function Home() {
             </p>
             <h3>結果・区間・ボール</h3>
             <p>
-              successは成功1、失敗0、未確認は空欄。新規動画の区間は姿勢からの候補で確認が必要です。ボールは観測値を保存したまま、飛行区間に放物線を当てはめ、揺れと欠測を補正します。リング接触後には延長しません。橙が補正値、灰色が観測値です。補正は飛行区間全体を使う事後推定であり、ライブ測定値ではありません。新規動画のボール検出は未対応です。
+              successは成功1、失敗0、未確認は空欄。新規動画の区間は姿勢からの候補なので、離手時刻などを確認してください。ボールはEfficientDet-Lite2のsports
+              ball候補を追跡します。複数候補や見失った点は欠測にし、手修正できます。灰は自動候補、緑は手修正、橙の破線は放物線です。元の検出結果は保存します。放物線は飛行区間全体を使う事後推定で、観測不足なら表示しません。接触の判定はヒューリスティックで確認が必要です。小球・遮蔽・複数の球の精度は未検証です。
             </p>
             <h3>精度を検証するには</h3>
             <p>

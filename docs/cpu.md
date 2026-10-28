@@ -31,3 +31,7 @@ node analysis/export.mjs path/to/session.json results
 ```
 
 公開用ソースに個人動画やサンプル解析JSONは含みません。モデルは `npm run setup:assets` で取得します。停止はターミナルでCtrl+C。一時ファイルはサーバー終了時に削除します。
+
+## ボール解析（v0.2）
+
+ローカルCPUサーバーの画面で「ボールも自動検出する」をオンにした場合、CPUによる身体解析の後、ブラウザでEfficientDet-Lite2を動かします。Pythonの `extract.py` 単独実行にはボール検出は含みません。ブラウザの描画機能が利用できない場合は、身体解析後に手動でボール点を追加できます。

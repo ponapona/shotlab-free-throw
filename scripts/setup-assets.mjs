@@ -65,3 +65,25 @@ if (!bytes || hash(bytes) !== config.model.sha256) {
 console.log(
   `Assets ready: SDK ${installed.version}, model SHA-256 ${hash(bytes)}`,
 );
+const ballPath = path.join(
+  root,
+  "public/models/ball-efficientdet-lite2.tflite",
+);
+const ballModel = config.ball_tracking.model;
+let ballBytes;
+try {
+  ballBytes = await fs.readFile(ballPath);
+} catch {}
+if (!ballBytes || hash(ballBytes) !== ballModel.sha256) {
+  console.log("Downloading official EfficientDet-Lite2 model (about 12 MB)…");
+  const response = await fetch(ballModel.url, {
+    signal: AbortSignal.timeout(180000),
+  });
+  if (!response.ok)
+    throw new Error(`Ball model download failed: ${response.status}`);
+  ballBytes = Buffer.from(await response.arrayBuffer());
+  if (hash(ballBytes) !== ballModel.sha256)
+    throw new Error("Ball model SHA-256 mismatch");
+  await fs.writeFile(ballPath, ballBytes);
+}
+console.log(`Ball model ready: SHA-256 ${hash(ballBytes)}`);

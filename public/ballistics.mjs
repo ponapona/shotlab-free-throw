@@ -1,5 +1,6 @@
 /** Offline image-plane trajectory reconstruction. Raw observations are never changed. */
 import { SETTINGS } from "./settings.mjs";
+import { applyBallEdits } from "./ball-tracking.mjs";
 export const BALL_METHOD = "robust_parabola_v1";
 const finite = (v) => typeof v === "number" && Number.isFinite(v);
 const rounded = (v) => (finite(v) ? Number(v.toFixed(5)) : null);
@@ -170,6 +171,7 @@ export function fitFlight(frames, shot, meta) {
 }
 
 export function correctBallistics(data, shots = data.shots ?? []) {
+  applyBallEdits(data);
   const fits = shots.map((s) => fitFlight(data.frames, s, data.meta));
   for (const frame of data.frames) {
     const fit = fits.find(
