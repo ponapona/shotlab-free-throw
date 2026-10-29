@@ -1439,3 +1439,50 @@ footer {
   max-height: 92vh;
   overflow-y: auto;
 }
+.analysis-identity {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 16px;
+  background: #f4f7f8;
+  border-radius: 8px;
+}
+.analysis-identity label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.analysis-identity input,
+.analysis-identity select,
+.ball-editor select {
+  padding: 8px;
+  border: 1px solid #cbd5df;
+  border-radius: 5px;
+  background: white;
+  color: #263543;
+  max-width: 100%;
+}
+.analysis-identity small {
+  grid-column: 1/-1;
+  color: #607080;
+}
+.ball-anchor-list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.ball-editor .ball-edit-actions {
+  flex-wrap: wrap;
+}
+.ball-editor p {
+  line-height: 1.65;
+}
+.ball-editor label {
+  font-size: 12px;
+}
+.ball-trajectory svg circle {
+  cursor: pointer;
+}

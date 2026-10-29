@@ -1,6 +1,6 @@
 // Generated from config/defaults.json. Run npm run config after editing.
 export const SETTINGS = {
-  "app_version": "0.2.0",
+  "app_version": "0.3.0",
   "schema_version": "shotlab/1.0",
   "model": {
     "name": "MediaPipe Pose Landmarker Heavy float16",
@@ -35,11 +35,16 @@ export const SETTINGS = {
   },
   "ballistics": {
     "search_window_s": 1.8,
-    "min_observations": 8,
-    "ransac_trials": 900,
+    "min_observations": 6,
+    "ransac_trials": 1800,
     "random_seed": 1729,
     "min_residual_px": 3,
-    "residual_height_fraction": 0.015
+    "residual_height_fraction": 0.015,
+    "manual_min_span_s": 0.2,
+    "auto_min_span_s": 0.35,
+    "manual_min_separation_s": 0.06,
+    "wrist_gate_diag_fraction": 0.12,
+    "min_support_fraction": 0.35
   },
   "shot_candidates": {
     "max_gap_s": 0.28,
@@ -65,6 +70,21 @@ export const SETTINGS = {
     "gate_diag_fraction": 0.035,
     "max_speed_diag_s": 2,
     "max_diameter_fraction": 0.2,
-    "max_crop_side_px": 1280
+    "max_crop_side_px": 1280,
+    "motion": {
+      "enabled": true,
+      "color": "white_or_orange",
+      "background_frames": 9,
+      "max_side_px": 800,
+      "difference_threshold": 28,
+      "min_diameter_fraction": 0.012,
+      "max_diameter_fraction": 0.09
+    }
+  },
+  "features": {
+    "waveform_points": 51,
+    "interpolation_max_gap_s": 0.12,
+    "min_valid_fraction": 0.8,
+    "min_valid_samples": 3
   }
 };

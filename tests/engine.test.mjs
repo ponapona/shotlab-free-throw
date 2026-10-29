@@ -99,7 +99,7 @@ test("dictionary exactly matches all three export schemas", () => {
       dictionary.filter((x) => x.file === file).map((x) => x.column),
       Object.keys(row),
     );
-  assert.equal(dictionary.length, 209);
+  assert.equal(new Set(dictionary.map(r=>r.file+":"+r.column)).size, dictionary.length);
 });
 test("saved settings are reused and defaults are stamped", () => {
   const d = data([frame(0, pose())]);

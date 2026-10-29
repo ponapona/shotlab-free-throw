@@ -7,6 +7,7 @@ import {
   shotRows,
   landmarkRows,
 } from "./engine.mjs";
+import { phaseRows, waveformRows, pcaRows } from "./shot-statistics.mjs";
 import { ballRows } from "./ball-tracking.mjs";
 const D = (
   name,
@@ -16,6 +17,105 @@ const D = (
   note = "",
 ) => ({ name, description, unit, missing, note });
 const COMMON = {
+  player_id: D(
+    "選手ID",
+    "利用者が入力する選手の識別子。PCAの数値特徴には入れない。",
+    "文字列",
+    "空欄＝未設定",
+  ),
+  session_id: D(
+    "測定ID",
+    "利用者が入力する撮影日・セッションの識別子。",
+    "文字列",
+    "空欄＝未設定",
+  ),
+  shooting_hand: D(
+    "シュートする手",
+    "right＝右、left＝左、unknown＝未設定。PCA候補のshooting_*列が参照する身体側。左右の値はそれ以外のCSVでは反転しない。",
+    "カテゴリ",
+  ),
+  phase_start_s: D(
+    "局面開始時刻",
+    "setupはstart、driveはdrive、follow_throughはrelease。",
+    "s",
+  ),
+  phase_end_s: D(
+    "局面終了時刻",
+    "setupはdrive、driveはrelease、follow_throughはend。",
+    "s",
+  ),
+  phase_duration_s: D(
+    "局面の長さ",
+    "局面終了−局面開始。時間正規化で失われる速度情報を保持。",
+    "s",
+  ),
+  n_phase_frames: D(
+    "局面のサンプル数",
+    "開始以上・終了未満。follow_throughのみ終了を含む。",
+    "個",
+  ),
+  phase_percent: D(
+    "局面内の正規化時刻",
+    "局面ごとに開始0%、終了100%の等間隔51点（設定で変更）。局面の境界は隣接する2局面の両端に現れる。",
+    "%",
+  ),
+  source_t_s: D(
+    "元の動画時刻",
+    "正規化時刻に対応する元動画の時刻。実フレーム間では局所的な線形補間。",
+    "s",
+  ),
+  drive_duration_s: D(
+    "シュート動作時間",
+    "release_s−drive_s。構え・飛行時間を含まない。",
+    "s",
+  ),
+  feature_min_valid_fraction: D(
+    "PCA集計特徴の最小有効割合",
+    "PCA候補の集計特徴に使った各区間・関節の有効割合の最小。リリース単点と時間は含めない。",
+    "0–1",
+  ),
+  pca_ready: D(
+    "PCA候補行の基本条件",
+    "選手ID・シュートする手・確認済み区間があり、10特徴が有限でdrive時間が正なら1。それ以外0。集計特徴には有効割合0.8以上・有効3点以上（設定値）を要求。",
+    "0/1",
+    "なし",
+    "測定の正確さやPCAの適切性を保証しない。",
+  ),
+  ball_assumed_x_px: D(
+    "仮定したX",
+    "ボールが見えず人が推測して置いたX。観測列には入れない。",
+    "px",
+  ),
+  ball_assumed_y_px: D(
+    "仮定したY",
+    "ボールが見えず人が推測して置いたY。観測列には入れない。",
+    "px",
+  ),
+  ball_candidate_recovered: D(
+    "軌道から候補を再選択",
+    "元の自動追跡とは別に、保存された画像候補から放物線に整合する点を採用した場合1。座標を生成したのではない。",
+    "0/1",
+  ),
+  ball_fit_basis: D(
+    "軌道推定の根拠",
+    "automatic_candidates＝画像候補、manual_anchors＝3点以上の手動観測、manual_and_automatic＝両者、assumed_anchors/assumed_and_automatic＝仮定点を含む。",
+    "カテゴリ",
+  ),
+  ball_fit_quality: D(
+    "軌道の確認区分",
+    "three_point_unvalidated＝3点のみ、review_required＝要確認、assumption_dependent＝仮定依存。位置精度の評価値ではない。",
+    "カテゴリ",
+  ),
+  ball_fit_n_manual: D(
+    "手動観測点数",
+    "飛行探索区間内のpoint指定数。見えない位置のassumed指定は含めない。",
+    "個",
+  ),
+  ball_fit_n_assumed: D(
+    "仮定点数",
+    "飛行探索区間内のassumed指定数。1以上なら推定曲線全体が仮定に依存する。",
+    "個",
+  ),
   ball_auto_x_px: D(
     "自動検出のX",
     "手修正前の追跡候補の中心X。元画像の左端が0。",
@@ -28,7 +128,7 @@ const COMMON = {
   ),
   ball_auto_score: D(
     "自動検出スコア",
-    "EfficientDetのsports ball分類スコア。手修正で上書きしない。",
+    "元の候補の適合スコア。EfficientDetは分類スコア、motion_componentは色・形状の未校正スコア。手修正で上書きしない。",
     "0–1",
     "空欄＝自動観測なし",
     "位置精度や正解確率ではない。",
@@ -40,18 +140,18 @@ const COMMON = {
   ),
   ball_candidate_count: D(
     "ボール検出候補数",
-    "閾値と大きさの条件を通過したsports ball候補数。全候補の座標はセッションJSONに保存。",
+    "AIおよび動き・色・大きさの条件を通過した画像候補数。全候補の座標はセッションJSONに保存。",
     "個",
     "空欄＝未実行、0＝候補なし",
   ),
   ball_tracking_status: D(
     "自動追跡の状態",
-    "observed＝採用候補、missing＝未検出、ambiguous＝候補を絞れない、rejected＝追跡条件外、not_run＝未実行。",
+    "observed＝採用候補、missing＝未検出、ambiguous＝候補を絞れない、rejected＝追跡条件外、not_run＝未実行、outside_search＝シュートの飛行探索区間外。",
     "カテゴリ",
   ),
   ball_edit: D(
     "ボールの手修正",
-    "none＝修正なし、point＝人が中心を指定、missing＝人が欠測に指定。",
+    "none＝修正なし、point＝人が見える中心を指定、assumed＝見えない位置を仮定、missing＝観測を除外。",
     "カテゴリ",
   ),
   ball_edited_at: D(
@@ -61,7 +161,7 @@ const COMMON = {
   ),
   ball_source: D(
     "採用座標の由来",
-    "efficientdet_lite2＝自動候補、manual＝手修正。旧セッションは旧方式名。",
+    "efficientdet_lite2＝AI候補、motion_component＝背景差分の画像候補、manual＝人の観測。仮定点はこの観測列には入れない。",
     "文字列",
   ),
   ball_x_norm: D(
@@ -233,7 +333,7 @@ const COMMON = {
   ),
   ball_correction_status: D(
     "ボール補正の状態",
-    "observed_fit＝採用観測点を補正、outlier_replaced＝外れ値を補正、interpolated＝欠測を補間、outside_flight＝観測あり・補正区間外、unavailable＝補正値なし。",
+    "observed_fit＝採用観測点を補正、outlier_replaced＝外れ値を補正、interpolated＝欠測を補間、outside_flight＝観測あり・補正区間外、unavailable＝補正値なし、assumption_based＝仮定点を含む曲線。",
     "カテゴリ",
     "なし",
   ),
@@ -258,7 +358,7 @@ const COMMON = {
   ),
   ball_fit_rmse_px: D(
     "当てはまりのRMSE",
-    "採用観測点と放物線の2D距離の二乗平均平方根。",
+    "採用した支持点と放物線の2D距離の二乗平均平方根。仮定点を使う場合はその点への残差も含む。",
     "px",
     "空欄＝当てはめ不可",
     "観測候補に対する当てはまり。真の位置の測定誤差ではない。",
@@ -272,37 +372,37 @@ const COMMON = {
   ),
   ball_correction_method: D(
     "補正方法",
-    "robust_parabola_v1：決定的なRANSAC候補評価と最小二乗再推定。X一次・Y二次。",
+    "hybrid_parabola_v2：画像候補のRANSACと再推定、または3時刻以上の指定点の最小二乗。X一次・Y二次。",
     "文字列",
     "空欄＝補正値なし",
   ),
   ball_fit_status: D(
     "投ごとの放物線推定状態",
-    "fitted＝推定成功、insufficient_observations＝観測不足、no_valid_parabola＝条件を満たす曲線なし、insufficient_flight_span＝飛行区間不足、unavailable＝未計算。",
+    "fitted＝推定成功、insufficient_observations＝観測不足、no_valid_parabola＝条件を満たす曲線なし、insufficient_flight_span＝飛行区間不足、anchors_too_close＝指定時刻の間隔不足、inconsistent_anchors＝指定点とモデルが不整合、unavailable＝未計算。",
     "カテゴリ",
     "なし",
   ),
   ball_fit_start_s: D(
     "補正区間の開始",
-    "採用した最初の飛行観測点の時刻。",
+    "採用した最初の支持点（観測または明示した仮定点）の時刻。",
     "s",
     "空欄＝当てはめ不可",
   ),
   ball_fit_end_s: D(
     "補正区間の終了",
-    "採用した最後の飛行観測点の時刻。この外側を補間・外挿しない。",
+    "採用した最後の支持点（観測または明示した仮定点）の時刻。この外側を補間・外挿しない。",
     "s",
     "空欄＝当てはめ不可",
   ),
   ball_fit_n_observations: D(
     "補正候補の観測点数",
-    "release_s～min(end_s,release_s＋1.8)の観測ボール候補数。",
+    "release_s～min(end_s,release_s＋1.8)に観測候補がある時刻の数。複数候補があっても同時刻は1と数え、仮定点は除く。",
     "点",
     "なし",
   ),
   ball_fit_n_inliers: D(
-    "採用観測点数",
-    "最終的な放物線の再推定に採用した観測点数。",
+    "採用した支持点数",
+    "最終的な放物線に採用した時刻の数。手動の仮定点を使う場合はその数を含むためball_fit_n_assumedと併読。",
     "点",
     "推定失敗は0",
   ),
@@ -436,6 +536,59 @@ const joint = {
 };
 function definition(key) {
   if (COMMON[key]) return COMMON[key];
+  if (key.endsWith("_sample_source"))
+    return D(
+      "波形値の由来",
+      "sample＝元の有効サンプル、linear_interpolation＝隣接有効点の線形補間、missing＝欠測。間隔が0.12秒（設定値）を超える補間・端外挿はしない。",
+      "カテゴリ",
+    );
+  if (key.startsWith("shooting_")) {
+    const d = definition(key.replace("shooting_", "right_"));
+    return {
+      ...d,
+      name: d.name.replace("右", "シュートする側"),
+      description: "shooting_handで指定した身体側。 " + d.description,
+      note: d.note + " 身体の左右をそろえたPCA候補。",
+    };
+  }
+  const statMatch = key.match(
+    /^(.*)_(mean|median|sd|iqr|rom|n_valid|valid_fraction)_(pre|phase|drive|setup)$/,
+  );
+  if (statMatch) {
+    const [, baseKey, stat, scope] = statMatch,
+      base = definition(baseKey);
+    const label = {
+      mean: "平均",
+      median: "中央値",
+      sd: "標本標準偏差",
+      iqr: "四分位範囲",
+      rom: "可動域",
+      n_valid: "有効点数",
+      valid_fraction: "有効割合",
+    }[stat];
+    const method = {
+      mean: "有効サンプルの算術平均（時間加重なし）",
+      median: "ソートした有効値の50%点",
+      sd: "有効値の偏差平方和をn−1で割った平方根（n≥2）",
+      iqr: "75%点−25%点。分位点は(n−1)pの隣接順位を線形補間",
+      rom: "有効値の最大−最小",
+      n_valid: "有限な有効値の数",
+      valid_fraction: "有効点数／区間内サンプル数",
+    }[stat];
+    const interval = {
+      pre: "start以上release以下",
+      phase: "phase_start以上phase_end未満（follow_throughのみ終了を含む）",
+      drive: "drive以上release未満",
+      setup: "start以上drive未満",
+    }[scope];
+    return D(
+      base.name + "・" + label,
+      interval + "の" + method + "。欠測は除外し、0に置換しない。",
+      stat === "n_valid" ? "個" : stat === "valid_fraction" ? "0–1" : base.unit,
+      "空欄＝有効値なし／SDは2点未満",
+      "記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。",
+    );
+  }
   if (key.endsWith("_raw")) {
     const base = definition(key.slice(0, -4));
     return {
@@ -549,6 +702,9 @@ export function dictionaryRows() {
     ["landmarks.csv", landmarkRows(data)[0]],
     ["body.csv", landmarkRows(data, { bodyOnly: true })[0]],
     ["ball.csv", ballRows(data, data.shots)[0]],
+    ["phases.csv", phaseRows(data, data.shots)[0]],
+    ["waveforms.csv", waveformRows(data, data.shots)[0]],
+    ["pca.csv", pcaRows(data, data.shots)[0]],
   ].flatMap(([file, row]) =>
     Object.keys(row).map((column) => {
       const d = definition(column);

@@ -1,6 +1,9 @@
 ﻿file,column,name_ja,description_ja,unit,missing_value,notes
 frames.csv,source_sha256,動画識別SHA-256,解析元動画のSHA-256。複数CSVの対応確認に使う。,文字列,空欄＝旧版などで未記録,
 frames.csv,app_version,処理アプリのバージョン,特徴量を計算・再計算したShotLabのバージョン。設定は対応するmetadata JSONを参照。,文字列,なし,
+frames.csv,player_id,選手ID,利用者が入力する選手の識別子。PCAの数値特徴には入れない。,文字列,空欄＝未設定,
+frames.csv,session_id,測定ID,利用者が入力する撮影日・セッションの識別子。,文字列,空欄＝未設定,
+frames.csv,shooting_hand,シュートする手,right＝右、left＝左、unknown＝未設定。PCA候補のshooting_*列が参照する身体側。左右の値はそれ以外のCSVでは反転しない。,カテゴリ,空欄＝値なし／計算不可,
 frames.csv,frame,フレーム番号,0始まり。CPU版は原動画のフレーム、ブラウザ版は再サンプリング番号。,番号,なし,
 frames.csv,t_s,動画内時刻,動画開始からの経過秒。時刻の取得方法はセッションJSONのmeta.timestamp_source。,s,なし,
 frames.csv,shot_id,シュートID,対象のシュート区間の識別番号。追加・削除後も既存IDを維持。,番号,空欄＝シュート区間外,
@@ -54,13 +57,16 @@ frames.csv,ball_y_px,ボール採用Y,手修正があれば修正座標、なけ
 frames.csv,ball_visibility,ボール観測の適合スコア,自動候補の分類スコア。手修正の座標にはスコアを付けない。旧セッションでは旧追跡器の未校正スコア。,0–1,空欄＝未観測／手修正,ボール位置の正確さを保証する確率ではない。
 frames.csv,ball_x_px_corrected,放物線補正X,飛行区間の推定X＝x0＋vx×u（u＝t_s−release_s）。,px,空欄＝補正区間外／当てはめ不可,飛行全体を使う事後推定。実測値・ライブ値ではない。
 frames.csv,ball_y_px_corrected,放物線補正Y,飛行区間の推定Y＝y0＋vy×u＋a×u²。下向き正。,px,空欄＝補正区間外／当てはめ不可,飛行全体を使う事後推定。リング接触後へ外挿しない。
-frames.csv,ball_correction_status,ボール補正の状態,observed_fit＝採用観測点を補正、outlier_replaced＝外れ値を補正、interpolated＝欠測を補間、outside_flight＝観測あり・補正区間外、unavailable＝補正値なし。,カテゴリ,なし,
+frames.csv,ball_correction_status,ボール補正の状態,observed_fit＝採用観測点を補正、outlier_replaced＝外れ値を補正、interpolated＝欠測を補間、outside_flight＝観測あり・補正区間外、unavailable＝補正値なし、assumption_based＝仮定点を含む曲線。,カテゴリ,なし,
 frames.csv,ball_fit_shot_id,補正対象のシュートID,このフレームの補正値を生成した放物線のシュートID。,番号,空欄＝補正値なし,
 frames.csv,ball_fit_inlier,観測点の採否,"観測値と補正値の2D距離が閾値以下＝1、閾値超過＝0。閾値はmax(3,画像高さ×0.015)px。",0/1,空欄＝未観測／補正値なし,
 frames.csv,ball_fit_residual_px,観測と補正の距離,元のボール候補点と放物線補正点のユークリッド距離。,px,空欄＝未観測／補正値なし,基準計測との誤差ではない。
-frames.csv,ball_fit_rmse_px,当てはまりのRMSE,採用観測点と放物線の2D距離の二乗平均平方根。,px,空欄＝当てはめ不可,観測候補に対する当てはまり。真の位置の測定誤差ではない。
+frames.csv,ball_fit_rmse_px,当てはまりのRMSE,採用した支持点と放物線の2D距離の二乗平均平方根。仮定点を使う場合はその点への残差も含む。,px,空欄＝当てはめ不可,観測候補に対する当てはまり。真の位置の測定誤差ではない。
 frames.csv,ball_fit_available_at_s,補正で参照した区間の終端,"補正候補の探索終端min(end_s,release_s＋1.8)。事後計算でこの時点までの観測を参照。",s,空欄＝補正値なし,これより早い時点で確定していた値として扱わない。
-frames.csv,ball_correction_method,補正方法,robust_parabola_v1：決定的なRANSAC候補評価と最小二乗再推定。X一次・Y二次。,文字列,空欄＝補正値なし,
+frames.csv,ball_correction_method,補正方法,hybrid_parabola_v2：画像候補のRANSACと再推定、または3時刻以上の指定点の最小二乗。X一次・Y二次。,文字列,空欄＝補正値なし,
+frames.csv,ball_fit_basis,軌道推定の根拠,automatic_candidates＝画像候補、manual_anchors＝3点以上の手動観測、manual_and_automatic＝両者、assumed_anchors/assumed_and_automatic＝仮定点を含む。,カテゴリ,空欄＝値なし／計算不可,
+frames.csv,ball_fit_n_assumed,仮定点数,飛行探索区間内のassumed指定数。1以上なら推定曲線全体が仮定に依存する。,個,空欄＝値なし／計算不可,
+frames.csv,ball_fit_quality,軌道の確認区分,three_point_unvalidated＝3点のみ、review_required＝要確認、assumption_dependent＝仮定依存。位置精度の評価値ではない。,カテゴリ,空欄＝値なし／計算不可,
 frames.csv,left_elbow_deg_raw,左肘の2D内角（生値）,肩→肘→手首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。 平滑化前の座標から算出。可視性による除外条件は同じ。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
 frames.csv,left_elbow_3d_est_deg_raw,左肘の推定3D内角（生値）,肩→肘→手首の中央点を頂点とする内角。モデルの推定3D座標から算出。 平滑化前の座標から算出。可視性による除外条件は同じ。,deg,空欄＝可視性不足／未検出／計算不可,推定3D座標には平滑化を適用していないため、対応する非raw列と同じ値。
 frames.csv,right_elbow_deg_raw,右肘の2D内角（生値）,肩→肘→手首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。 平滑化前の座標から算出。可視性による除外条件は同じ。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
@@ -87,6 +93,9 @@ frames.csv,left_wrist_y_px_raw,左手首のY座標（生値）,左手首の画�
 frames.csv,right_wrist_y_px_raw,右手首のY座標（生値）,右手首の画像Y座標。下向き正。 平滑化前の座標から算出。可視性による除外条件は同じ。,px,空欄＝値なし／計算不可,
 shots.csv,source_sha256,動画識別SHA-256,解析元動画のSHA-256。複数CSVの対応確認に使う。,文字列,空欄＝旧版などで未記録,
 shots.csv,app_version,処理アプリのバージョン,特徴量を計算・再計算したShotLabのバージョン。設定は対応するmetadata JSONを参照。,文字列,なし,
+shots.csv,player_id,選手ID,利用者が入力する選手の識別子。PCAの数値特徴には入れない。,文字列,空欄＝未設定,
+shots.csv,session_id,測定ID,利用者が入力する撮影日・セッションの識別子。,文字列,空欄＝未設定,
+shots.csv,shooting_hand,シュートする手,right＝右、left＝左、unknown＝未設定。PCA候補のshooting_*列が参照する身体側。左右の値はそれ以外のCSVでは反転しない。,カテゴリ,空欄＝値なし／計算不可,
 shots.csv,shot_id,シュートID,対象のシュート区間の識別番号。追加・削除後も既存IDを維持。,番号,空欄＝シュート区間外,
 shots.csv,start_s,セット開始時刻,シュート区間とリリース前特徴量の集計開始時刻。,s,空欄＝値なし／計算不可,
 shots.csv,drive_s,上昇開始時刻,セットからシュート動作へ移る時刻。,s,空欄＝値なし／計算不可,
@@ -98,50 +107,128 @@ shots.csv,timing_source,区間時刻の由来,pose_heuristic＝姿勢に基づ�
 shots.csv,timing_reviewed,区間時刻の確認状態,確認済み＝1、未確認＝0。旧版のフレームCSVはtrue/false。,0/1,空欄＝区間外,
 shots.csv,n_pre_release_frames,リリース前のフレーム数,start_s以上release_s以下に含まれる全フレーム数。欠測も数える。,フレーム,なし,
 shots.csv,note,確認メモ,区間や結果について入力した自由記述。,,空欄＝メモなし,
-shots.csv,left_knee_deg_min_pre,左膝の2D内角・リリース前最小,セット開始以上、リリース以下の有効値の最小。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
-shots.csv,left_knee_deg_max_pre,左膝の2D内角・リリース前最大,セット開始以上、リリース以下の有効値の最大。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
-shots.csv,left_knee_deg_at_release,左膝の2D内角・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
-shots.csv,left_knee_deg_valid_fraction,左膝の2D内角・有効割合,セット開始以上、リリース以下の全フレームに対する有効値の割合。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,0–1,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
-shots.csv,right_knee_deg_min_pre,右膝の2D内角・リリース前最小,セット開始以上、リリース以下の有効値の最小。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
-shots.csv,right_knee_deg_max_pre,右膝の2D内角・リリース前最大,セット開始以上、リリース以下の有効値の最大。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
-shots.csv,right_knee_deg_at_release,右膝の2D内角・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
-shots.csv,right_knee_deg_valid_fraction,右膝の2D内角・有効割合,セット開始以上、リリース以下の全フレームに対する有効値の割合。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,0–1,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,left_elbow_deg_n_valid_pre,左肘の2D内角・有効点数,start以上release以下の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_elbow_deg_mean_pre,左肘の2D内角・平均,start以上release以下の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_elbow_deg_median_pre,左肘の2D内角・中央値,start以上release以下のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_elbow_deg_sd_pre,左肘の2D内角・標本標準偏差,start以上release以下の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_elbow_deg_iqr_pre,左肘の2D内角・四分位範囲,start以上release以下の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_elbow_deg_rom_pre,左肘の2D内角・可動域,start以上release以下の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
 shots.csv,left_elbow_deg_min_pre,左肘の2D内角・リリース前最小,セット開始以上、リリース以下の有効値の最小。 肩→肘→手首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
 shots.csv,left_elbow_deg_max_pre,左肘の2D内角・リリース前最大,セット開始以上、リリース以下の有効値の最大。 肩→肘→手首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
 shots.csv,left_elbow_deg_at_release,左肘の2D内角・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 肩→肘→手首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
 shots.csv,left_elbow_deg_valid_fraction,左肘の2D内角・有効割合,セット開始以上、リリース以下の全フレームに対する有効値の割合。 肩→肘→手首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,0–1,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,right_elbow_deg_n_valid_pre,右肘の2D内角・有効点数,start以上release以下の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_elbow_deg_mean_pre,右肘の2D内角・平均,start以上release以下の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_elbow_deg_median_pre,右肘の2D内角・中央値,start以上release以下のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_elbow_deg_sd_pre,右肘の2D内角・標本標準偏差,start以上release以下の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_elbow_deg_iqr_pre,右肘の2D内角・四分位範囲,start以上release以下の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_elbow_deg_rom_pre,右肘の2D内角・可動域,start以上release以下の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
 shots.csv,right_elbow_deg_min_pre,右肘の2D内角・リリース前最小,セット開始以上、リリース以下の有効値の最小。 肩→肘→手首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
 shots.csv,right_elbow_deg_max_pre,右肘の2D内角・リリース前最大,セット開始以上、リリース以下の有効値の最大。 肩→肘→手首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
 shots.csv,right_elbow_deg_at_release,右肘の2D内角・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 肩→肘→手首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
 shots.csv,right_elbow_deg_valid_fraction,右肘の2D内角・有効割合,セット開始以上、リリース以下の全フレームに対する有効値の割合。 肩→肘→手首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,0–1,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,left_shoulder_deg_n_valid_pre,左肩の2D内角・有効点数,start以上release以下の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_shoulder_deg_mean_pre,左肩の2D内角・平均,start以上release以下の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_shoulder_deg_median_pre,左肩の2D内角・中央値,start以上release以下のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_shoulder_deg_sd_pre,左肩の2D内角・標本標準偏差,start以上release以下の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_shoulder_deg_iqr_pre,左肩の2D内角・四分位範囲,start以上release以下の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_shoulder_deg_rom_pre,左肩の2D内角・可動域,start以上release以下の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_shoulder_deg_min_pre,左肩の2D内角・リリース前最小,セット開始以上、リリース以下の有効値の最小。 股→肩→肘の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,left_shoulder_deg_max_pre,左肩の2D内角・リリース前最大,セット開始以上、リリース以下の有効値の最大。 股→肩→肘の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,left_shoulder_deg_at_release,左肩の2D内角・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 股→肩→肘の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,left_shoulder_deg_valid_fraction,左肩の2D内角・有効割合,セット開始以上、リリース以下の全フレームに対する有効値の割合。 股→肩→肘の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,0–1,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,right_shoulder_deg_n_valid_pre,右肩の2D内角・有効点数,start以上release以下の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_shoulder_deg_mean_pre,右肩の2D内角・平均,start以上release以下の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_shoulder_deg_median_pre,右肩の2D内角・中央値,start以上release以下のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_shoulder_deg_sd_pre,右肩の2D内角・標本標準偏差,start以上release以下の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_shoulder_deg_iqr_pre,右肩の2D内角・四分位範囲,start以上release以下の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_shoulder_deg_rom_pre,右肩の2D内角・可動域,start以上release以下の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_shoulder_deg_min_pre,右肩の2D内角・リリース前最小,セット開始以上、リリース以下の有効値の最小。 股→肩→肘の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,right_shoulder_deg_max_pre,右肩の2D内角・リリース前最大,セット開始以上、リリース以下の有効値の最大。 股→肩→肘の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,right_shoulder_deg_at_release,右肩の2D内角・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 股→肩→肘の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,right_shoulder_deg_valid_fraction,右肩の2D内角・有効割合,セット開始以上、リリース以下の全フレームに対する有効値の割合。 股→肩→肘の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,0–1,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,left_knee_deg_n_valid_pre,左膝の2D内角・有効点数,start以上release以下の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_knee_deg_mean_pre,左膝の2D内角・平均,start以上release以下の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_knee_deg_median_pre,左膝の2D内角・中央値,start以上release以下のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_knee_deg_sd_pre,左膝の2D内角・標本標準偏差,start以上release以下の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_knee_deg_iqr_pre,左膝の2D内角・四分位範囲,start以上release以下の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_knee_deg_rom_pre,左膝の2D内角・可動域,start以上release以下の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_knee_deg_min_pre,左膝の2D内角・リリース前最小,セット開始以上、リリース以下の有効値の最小。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,left_knee_deg_max_pre,左膝の2D内角・リリース前最大,セット開始以上、リリース以下の有効値の最大。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,left_knee_deg_at_release,左膝の2D内角・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,left_knee_deg_valid_fraction,左膝の2D内角・有効割合,セット開始以上、リリース以下の全フレームに対する有効値の割合。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,0–1,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,right_knee_deg_n_valid_pre,右膝の2D内角・有効点数,start以上release以下の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_knee_deg_mean_pre,右膝の2D内角・平均,start以上release以下の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_knee_deg_median_pre,右膝の2D内角・中央値,start以上release以下のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_knee_deg_sd_pre,右膝の2D内角・標本標準偏差,start以上release以下の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_knee_deg_iqr_pre,右膝の2D内角・四分位範囲,start以上release以下の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_knee_deg_rom_pre,右膝の2D内角・可動域,start以上release以下の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_knee_deg_min_pre,右膝の2D内角・リリース前最小,セット開始以上、リリース以下の有効値の最小。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,right_knee_deg_max_pre,右膝の2D内角・リリース前最大,セット開始以上、リリース以下の有効値の最大。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,right_knee_deg_at_release,右膝の2D内角・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,right_knee_deg_valid_fraction,右膝の2D内角・有効割合,セット開始以上、リリース以下の全フレームに対する有効値の割合。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,0–1,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,left_hip_deg_n_valid_pre,左股関節の2D内角・有効点数,start以上release以下の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_hip_deg_mean_pre,左股関節の2D内角・平均,start以上release以下の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_hip_deg_median_pre,左股関節の2D内角・中央値,start以上release以下のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_hip_deg_sd_pre,左股関節の2D内角・標本標準偏差,start以上release以下の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_hip_deg_iqr_pre,左股関節の2D内角・四分位範囲,start以上release以下の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_hip_deg_rom_pre,左股関節の2D内角・可動域,start以上release以下の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
 shots.csv,left_hip_deg_min_pre,左股関節の2D内角・リリース前最小,セット開始以上、リリース以下の有効値の最小。 肩→股→膝の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
 shots.csv,left_hip_deg_max_pre,左股関節の2D内角・リリース前最大,セット開始以上、リリース以下の有効値の最大。 肩→股→膝の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
 shots.csv,left_hip_deg_at_release,左股関節の2D内角・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 肩→股→膝の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
 shots.csv,left_hip_deg_valid_fraction,左股関節の2D内角・有効割合,セット開始以上、リリース以下の全フレームに対する有効値の割合。 肩→股→膝の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,0–1,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,right_hip_deg_n_valid_pre,右股関節の2D内角・有効点数,start以上release以下の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_hip_deg_mean_pre,右股関節の2D内角・平均,start以上release以下の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_hip_deg_median_pre,右股関節の2D内角・中央値,start以上release以下のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_hip_deg_sd_pre,右股関節の2D内角・標本標準偏差,start以上release以下の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_hip_deg_iqr_pre,右股関節の2D内角・四分位範囲,start以上release以下の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_hip_deg_rom_pre,右股関節の2D内角・可動域,start以上release以下の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
 shots.csv,right_hip_deg_min_pre,右股関節の2D内角・リリース前最小,セット開始以上、リリース以下の有効値の最小。 肩→股→膝の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
 shots.csv,right_hip_deg_max_pre,右股関節の2D内角・リリース前最大,セット開始以上、リリース以下の有効値の最大。 肩→股→膝の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
 shots.csv,right_hip_deg_at_release,右股関節の2D内角・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 肩→股→膝の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
 shots.csv,right_hip_deg_valid_fraction,右股関節の2D内角・有効割合,セット開始以上、リリース以下の全フレームに対する有効値の割合。 肩→股→膝の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,0–1,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+shots.csv,left_ankle_deg_n_valid_pre,左足首の2D内角・有効点数,start以上release以下の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_ankle_deg_mean_pre,左足首の2D内角・平均,start以上release以下の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_ankle_deg_median_pre,左足首の2D内角・中央値,start以上release以下のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_ankle_deg_sd_pre,左足首の2D内角・標本標準偏差,start以上release以下の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_ankle_deg_iqr_pre,左足首の2D内角・四分位範囲,start以上release以下の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,left_ankle_deg_rom_pre,左足首の2D内角・可動域,start以上release以下の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
 shots.csv,left_ankle_deg_min_pre,左足首の2D内角・リリース前最小,セット開始以上、リリース以下の有効値の最小。 膝→足首→足先の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,臨床的な足関節背屈角ではない。
 shots.csv,left_ankle_deg_max_pre,左足首の2D内角・リリース前最大,セット開始以上、リリース以下の有効値の最大。 膝→足首→足先の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,臨床的な足関節背屈角ではない。
 shots.csv,left_ankle_deg_at_release,左足首の2D内角・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 膝→足首→足先の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,臨床的な足関節背屈角ではない。
 shots.csv,left_ankle_deg_valid_fraction,左足首の2D内角・有効割合,セット開始以上、リリース以下の全フレームに対する有効値の割合。 膝→足首→足先の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,0–1,空欄＝可視性不足／未検出／計算不可,臨床的な足関節背屈角ではない。
+shots.csv,right_ankle_deg_n_valid_pre,右足首の2D内角・有効点数,start以上release以下の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_ankle_deg_mean_pre,右足首の2D内角・平均,start以上release以下の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_ankle_deg_median_pre,右足首の2D内角・中央値,start以上release以下のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_ankle_deg_sd_pre,右足首の2D内角・標本標準偏差,start以上release以下の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_ankle_deg_iqr_pre,右足首の2D内角・四分位範囲,start以上release以下の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,right_ankle_deg_rom_pre,右足首の2D内角・可動域,start以上release以下の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
 shots.csv,right_ankle_deg_min_pre,右足首の2D内角・リリース前最小,セット開始以上、リリース以下の有効値の最小。 膝→足首→足先の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,臨床的な足関節背屈角ではない。
 shots.csv,right_ankle_deg_max_pre,右足首の2D内角・リリース前最大,セット開始以上、リリース以下の有効値の最大。 膝→足首→足先の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,臨床的な足関節背屈角ではない。
 shots.csv,right_ankle_deg_at_release,右足首の2D内角・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 膝→足首→足先の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,臨床的な足関節背屈角ではない。
 shots.csv,right_ankle_deg_valid_fraction,右足首の2D内角・有効割合,セット開始以上、リリース以下の全フレームに対する有効値の割合。 膝→足首→足先の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,0–1,空欄＝可視性不足／未検出／計算不可,臨床的な足関節背屈角ではない。
+shots.csv,trunk_lean_deg_n_valid_pre,体幹の傾き・有効点数,start以上release以下の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,trunk_lean_deg_mean_pre,体幹の傾き・平均,start以上release以下の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,trunk_lean_deg_median_pre,体幹の傾き・中央値,start以上release以下のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,trunk_lean_deg_sd_pre,体幹の傾き・標本標準偏差,start以上release以下の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,trunk_lean_deg_iqr_pre,体幹の傾き・四分位範囲,start以上release以下の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+shots.csv,trunk_lean_deg_rom_pre,体幹の傾き・可動域,start以上release以下の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
 shots.csv,trunk_lean_deg_min_pre,体幹の傾き・リリース前最小,セット開始以上、リリース以下の有効値の最小。 両股中点から両肩中点へ向かう線と、画像の上向き鉛直との符号付き角度。画像右への傾きが正。,deg,空欄＝肩・股のいずれかの可視性不足／未検出,
 shots.csv,trunk_lean_deg_max_pre,体幹の傾き・リリース前最大,セット開始以上、リリース以下の有効値の最大。 両股中点から両肩中点へ向かう線と、画像の上向き鉛直との符号付き角度。画像右への傾きが正。,deg,空欄＝肩・股のいずれかの可視性不足／未検出,
 shots.csv,trunk_lean_deg_at_release,体幹の傾き・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 両股中点から両肩中点へ向かう線と、画像の上向き鉛直との符号付き角度。画像右への傾きが正。,deg,空欄＝肩・股のいずれかの可視性不足／未検出,
 shots.csv,trunk_lean_deg_valid_fraction,体幹の傾き・有効割合,セット開始以上、リリース以下の全フレームに対する有効値の割合。 両股中点から両肩中点へ向かう線と、画像の上向き鉛直との符号付き角度。画像右への傾きが正。,0–1,空欄＝肩・股のいずれかの可視性不足／未検出,
 shots.csv,mean_visible_fraction_pre,リリース前の平均可視率,start_s以上release_s以下のvisible_fractionの算術平均。,0–1,空欄＝値なし／計算不可,
-shots.csv,ball_fit_status,投ごとの放物線推定状態,fitted＝推定成功、insufficient_observations＝観測不足、no_valid_parabola＝条件を満たす曲線なし、insufficient_flight_span＝飛行区間不足、unavailable＝未計算。,カテゴリ,なし,
-shots.csv,ball_fit_start_s,補正区間の開始,採用した最初の飛行観測点の時刻。,s,空欄＝当てはめ不可,
-shots.csv,ball_fit_end_s,補正区間の終了,採用した最後の飛行観測点の時刻。この外側を補間・外挿しない。,s,空欄＝当てはめ不可,
-shots.csv,ball_fit_n_observations,補正候補の観測点数,"release_s～min(end_s,release_s＋1.8)の観測ボール候補数。",点,なし,
-shots.csv,ball_fit_n_inliers,採用観測点数,最終的な放物線の再推定に採用した観測点数。,点,推定失敗は0,
+shots.csv,ball_fit_basis,軌道推定の根拠,automatic_candidates＝画像候補、manual_anchors＝3点以上の手動観測、manual_and_automatic＝両者、assumed_anchors/assumed_and_automatic＝仮定点を含む。,カテゴリ,空欄＝値なし／計算不可,
+shots.csv,ball_fit_n_manual,手動観測点数,飛行探索区間内のpoint指定数。見えない位置のassumed指定は含めない。,個,空欄＝値なし／計算不可,
+shots.csv,ball_fit_n_assumed,仮定点数,飛行探索区間内のassumed指定数。1以上なら推定曲線全体が仮定に依存する。,個,空欄＝値なし／計算不可,
+shots.csv,ball_fit_quality,軌道の確認区分,three_point_unvalidated＝3点のみ、review_required＝要確認、assumption_dependent＝仮定依存。位置精度の評価値ではない。,カテゴリ,空欄＝値なし／計算不可,
+shots.csv,ball_fit_status,投ごとの放物線推定状態,fitted＝推定成功、insufficient_observations＝観測不足、no_valid_parabola＝条件を満たす曲線なし、insufficient_flight_span＝飛行区間不足、anchors_too_close＝指定時刻の間隔不足、inconsistent_anchors＝指定点とモデルが不整合、unavailable＝未計算。,カテゴリ,なし,
+shots.csv,ball_fit_start_s,補正区間の開始,採用した最初の支持点（観測または明示した仮定点）の時刻。,s,空欄＝当てはめ不可,
+shots.csv,ball_fit_end_s,補正区間の終了,採用した最後の支持点（観測または明示した仮定点）の時刻。この外側を補間・外挿しない。,s,空欄＝当てはめ不可,
+shots.csv,ball_fit_n_observations,補正候補の観測点数,"release_s～min(end_s,release_s＋1.8)に観測候補がある時刻の数。複数候補があっても同時刻は1と数え、仮定点は除く。",点,なし,
+shots.csv,ball_fit_n_inliers,採用した支持点数,最終的な放物線に採用した時刻の数。手動の仮定点を使う場合はその数を含むためball_fit_n_assumedと併読。,点,推定失敗は0,
 shots.csv,ball_fit_n_interpolated,補間したフレーム数,補正区間内で元の観測がなかったフレーム数。,フレーム,空欄＝当てはめ不可,
-shots.csv,ball_fit_rmse_px,当てはまりのRMSE,採用観測点と放物線の2D距離の二乗平均平方根。,px,空欄＝当てはめ不可,観測候補に対する当てはまり。真の位置の測定誤差ではない。
+shots.csv,ball_fit_rmse_px,当てはまりのRMSE,採用した支持点と放物線の2D距離の二乗平均平方根。仮定点を使う場合はその点への残差も含む。,px,空欄＝当てはめ不可,観測候補に対する当てはまり。真の位置の測定誤差ではない。
 shots.csv,ball_fit_x0_px,Xの切片,X(u)=x0+vx×uのx0。u=0はrelease_s。,px,空欄＝当てはめ不可,切片はモデル値で、実測リリース位置ではない。
 shots.csv,ball_fit_vx_px_s,Xの一次係数,X(u)=x0+vx×uのvx。,px/s,空欄＝当てはめ不可,画面上の値。実空間の速度ではない。
 shots.csv,ball_fit_y0_px,Yの切片,Y(u)=y0+vy×u+a×u²のy0。,px,空欄＝当てはめ不可,
@@ -150,6 +237,9 @@ shots.csv,ball_fit_a_px_s2,Yの二次係数,Y(u)=y0+vy×u+a×u²のa。画像Y�
 shots.csv,ball_fit_available_at_s,補正で参照した区間の終端,"補正候補の探索終端min(end_s,release_s＋1.8)。事後計算でこの時点までの観測を参照。",s,空欄＝補正値なし,これより早い時点で確定していた値として扱わない。
 landmarks.csv,source_sha256,動画識別SHA-256,解析元動画のSHA-256。複数CSVの対応確認に使う。,文字列,空欄＝旧版などで未記録,
 landmarks.csv,app_version,処理アプリのバージョン,特徴量を計算・再計算したShotLabのバージョン。設定は対応するmetadata JSONを参照。,文字列,なし,
+landmarks.csv,player_id,選手ID,利用者が入力する選手の識別子。PCAの数値特徴には入れない。,文字列,空欄＝未設定,
+landmarks.csv,session_id,測定ID,利用者が入力する撮影日・セッションの識別子。,文字列,空欄＝未設定,
+landmarks.csv,shooting_hand,シュートする手,right＝右、left＝左、unknown＝未設定。PCA候補のshooting_*列が参照する身体側。左右の値はそれ以外のCSVでは反転しない。,カテゴリ,空欄＝値なし／計算不可,
 landmarks.csv,frame,フレーム番号,0始まり。CPU版は原動画のフレーム、ブラウザ版は再サンプリング番号。,番号,なし,
 landmarks.csv,t_s,動画内時刻,動画開始からの経過秒。時刻の取得方法はセッションJSONのmeta.timestamp_source。,s,なし,
 landmarks.csv,landmark_id,ランドマーク番号,MediaPipe Poseの点番号（0～32）。,番号,なし,
@@ -167,6 +257,9 @@ landmarks.csv,world_y_m_est,推定3DのY,股中点を原点としてモデルが
 landmarks.csv,world_z_m_est,推定3DのZ,股中点を原点としてモデルがメートル単位で出すZ座標。,m（推定）,空欄＝未検出／未出力,実測・校正された空間座標ではない。
 body.csv,source_sha256,動画識別SHA-256,解析元動画のSHA-256。複数CSVの対応確認に使う。,文字列,空欄＝旧版などで未記録,
 body.csv,app_version,処理アプリのバージョン,特徴量を計算・再計算したShotLabのバージョン。設定は対応するmetadata JSONを参照。,文字列,なし,
+body.csv,player_id,選手ID,利用者が入力する選手の識別子。PCAの数値特徴には入れない。,文字列,空欄＝未設定,
+body.csv,session_id,測定ID,利用者が入力する撮影日・セッションの識別子。,文字列,空欄＝未設定,
+body.csv,shooting_hand,シュートする手,right＝右、left＝左、unknown＝未設定。PCA候補のshooting_*列が参照する身体側。左右の値はそれ以外のCSVでは反転しない。,カテゴリ,空欄＝値なし／計算不可,
 body.csv,frame,フレーム番号,0始まり。CPU版は原動画のフレーム、ブラウザ版は再サンプリング番号。,番号,なし,
 body.csv,t_s,動画内時刻,動画開始からの経過秒。時刻の取得方法はセッションJSONのmeta.timestamp_source。,s,なし,
 body.csv,landmark_id,ランドマーク番号,MediaPipe Poseの点番号（0～32）。,番号,なし,
@@ -189,13 +282,13 @@ ball.csv,t_s,動画内時刻,動画開始からの経過秒。時刻の取得方
 ball.csv,shot_id,シュートID,対象のシュート区間の識別番号。追加・削除後も既存IDを維持。,番号,空欄＝シュート区間外,
 ball.csv,ball_auto_x_px,自動検出のX,手修正前の追跡候補の中心X。元画像の左端が0。,px,空欄＝値なし／計算不可,
 ball.csv,ball_auto_y_px,自動検出のY,手修正前の追跡候補の中心Y。元画像の上端が0、下向き正。,px,空欄＝値なし／計算不可,
-ball.csv,ball_auto_score,自動検出スコア,EfficientDetのsports ball分類スコア。手修正で上書きしない。,0–1,空欄＝自動観測なし,位置精度や正解確率ではない。
+ball.csv,ball_auto_score,自動検出スコア,元の候補の適合スコア。EfficientDetは分類スコア、motion_componentは色・形状の未校正スコア。手修正で上書きしない。,0–1,空欄＝自動観測なし,位置精度や正解確率ではない。
 ball.csv,ball_auto_track_id,自動追跡の区間番号,追跡が途切れ再取得すると新しい番号。選手IDやシュートIDではない。,番号,空欄＝値なし／計算不可,
-ball.csv,ball_candidate_count,ボール検出候補数,閾値と大きさの条件を通過したsports ball候補数。全候補の座標はセッションJSONに保存。,個,空欄＝未実行、0＝候補なし,
-ball.csv,ball_tracking_status,自動追跡の状態,observed＝採用候補、missing＝未検出、ambiguous＝候補を絞れない、rejected＝追跡条件外、not_run＝未実行。,カテゴリ,空欄＝値なし／計算不可,
-ball.csv,ball_edit,ボールの手修正,none＝修正なし、point＝人が中心を指定、missing＝人が欠測に指定。,カテゴリ,空欄＝値なし／計算不可,
+ball.csv,ball_candidate_count,ボール検出候補数,AIおよび動き・色・大きさの条件を通過した画像候補数。全候補の座標はセッションJSONに保存。,個,空欄＝未実行、0＝候補なし,
+ball.csv,ball_tracking_status,自動追跡の状態,observed＝採用候補、missing＝未検出、ambiguous＝候補を絞れない、rejected＝追跡条件外、not_run＝未実行、outside_search＝シュートの飛行探索区間外。,カテゴリ,空欄＝値なし／計算不可,
+ball.csv,ball_edit,ボールの手修正,none＝修正なし、point＝人が見える中心を指定、assumed＝見えない位置を仮定、missing＝観測を除外。,カテゴリ,空欄＝値なし／計算不可,
 ball.csv,ball_edited_at,ボール修正日時,最後にこのサンプルを手修正した日時（ISO 8601）。,日時,空欄＝値なし／計算不可,
-ball.csv,ball_source,採用座標の由来,efficientdet_lite2＝自動候補、manual＝手修正。旧セッションは旧方式名。,文字列,空欄＝値なし／計算不可,
+ball.csv,ball_source,採用座標の由来,efficientdet_lite2＝AI候補、motion_component＝背景差分の画像候補、manual＝人の観測。仮定点はこの観測列には入れない。,文字列,空欄＝値なし／計算不可,
 ball.csv,ball_x_px,ボール採用X,手修正があれば修正座標、なければ自動追跡候補のX。画像左端が0、右向き正。,px,空欄＝未観測,放物線補正前の値。自動検出の元座標はball.csvのball_auto_*列。
 ball.csv,ball_y_px,ボール採用Y,手修正があれば修正座標、なければ自動追跡候補のY。画像上端が0、下向き正。,px,空欄＝未観測,放物線補正前の値。自動検出の元座標はball.csvのball_auto_*列。
 ball.csv,ball_visibility,ボール観測の適合スコア,自動候補の分類スコア。手修正の座標にはスコアを付けない。旧セッションでは旧追跡器の未校正スコア。,0–1,空欄＝未観測／手修正,ボール位置の正確さを保証する確率ではない。
@@ -203,8 +296,159 @@ ball.csv,ball_x_norm,ボール採用X・正規化,手修正があれば手修正
 ball.csv,ball_y_norm,ボール採用Y・正規化,手修正があれば手修正、なければ自動候補のYを元画像高さで割った値。下向き正。,画像高さ比,空欄＝値なし／計算不可,
 ball.csv,ball_x_px_corrected,放物線補正X,飛行区間の推定X＝x0＋vx×u（u＝t_s−release_s）。,px,空欄＝補正区間外／当てはめ不可,飛行全体を使う事後推定。実測値・ライブ値ではない。
 ball.csv,ball_y_px_corrected,放物線補正Y,飛行区間の推定Y＝y0＋vy×u＋a×u²。下向き正。,px,空欄＝補正区間外／当てはめ不可,飛行全体を使う事後推定。リング接触後へ外挿しない。
-ball.csv,ball_correction_status,ボール補正の状態,observed_fit＝採用観測点を補正、outlier_replaced＝外れ値を補正、interpolated＝欠測を補間、outside_flight＝観測あり・補正区間外、unavailable＝補正値なし。,カテゴリ,なし,
+ball.csv,ball_correction_status,ボール補正の状態,observed_fit＝採用観測点を補正、outlier_replaced＝外れ値を補正、interpolated＝欠測を補間、outside_flight＝観測あり・補正区間外、unavailable＝補正値なし、assumption_based＝仮定点を含む曲線。,カテゴリ,なし,
 ball.csv,ball_fit_inlier,観測点の採否,"観測値と補正値の2D距離が閾値以下＝1、閾値超過＝0。閾値はmax(3,画像高さ×0.015)px。",0/1,空欄＝未観測／補正値なし,
 ball.csv,ball_fit_residual_px,観測と補正の距離,元のボール候補点と放物線補正点のユークリッド距離。,px,空欄＝未観測／補正値なし,基準計測との誤差ではない。
-ball.csv,ball_fit_rmse_px,当てはまりのRMSE,採用観測点と放物線の2D距離の二乗平均平方根。,px,空欄＝当てはめ不可,観測候補に対する当てはまり。真の位置の測定誤差ではない。
+ball.csv,ball_fit_rmse_px,当てはまりのRMSE,採用した支持点と放物線の2D距離の二乗平均平方根。仮定点を使う場合はその点への残差も含む。,px,空欄＝当てはめ不可,観測候補に対する当てはまり。真の位置の測定誤差ではない。
 ball.csv,ball_fit_available_at_s,補正で参照した区間の終端,"補正候補の探索終端min(end_s,release_s＋1.8)。事後計算でこの時点までの観測を参照。",s,空欄＝補正値なし,これより早い時点で確定していた値として扱わない。
+ball.csv,ball_fit_basis,軌道推定の根拠,automatic_candidates＝画像候補、manual_anchors＝3点以上の手動観測、manual_and_automatic＝両者、assumed_anchors/assumed_and_automatic＝仮定点を含む。,カテゴリ,空欄＝値なし／計算不可,
+ball.csv,ball_fit_n_assumed,仮定点数,飛行探索区間内のassumed指定数。1以上なら推定曲線全体が仮定に依存する。,個,空欄＝値なし／計算不可,
+ball.csv,ball_fit_quality,軌道の確認区分,three_point_unvalidated＝3点のみ、review_required＝要確認、assumption_dependent＝仮定依存。位置精度の評価値ではない。,カテゴリ,空欄＝値なし／計算不可,
+ball.csv,ball_assumed_x_px,仮定したX,ボールが見えず人が推測して置いたX。観測列には入れない。,px,空欄＝値なし／計算不可,
+ball.csv,ball_assumed_y_px,仮定したY,ボールが見えず人が推測して置いたY。観測列には入れない。,px,空欄＝値なし／計算不可,
+ball.csv,ball_candidate_recovered,軌道から候補を再選択,元の自動追跡とは別に、保存された画像候補から放物線に整合する点を採用した場合1。座標を生成したのではない。,0/1,空欄＝値なし／計算不可,
+ball.csv,player_id,選手ID,利用者が入力する選手の識別子。PCAの数値特徴には入れない。,文字列,空欄＝未設定,
+ball.csv,session_id,測定ID,利用者が入力する撮影日・セッションの識別子。,文字列,空欄＝未設定,
+ball.csv,shooting_hand,シュートする手,right＝右、left＝左、unknown＝未設定。PCA候補のshooting_*列が参照する身体側。左右の値はそれ以外のCSVでは反転しない。,カテゴリ,空欄＝値なし／計算不可,
+phases.csv,source_sha256,動画識別SHA-256,解析元動画のSHA-256。複数CSVの対応確認に使う。,文字列,空欄＝旧版などで未記録,
+phases.csv,app_version,処理アプリのバージョン,特徴量を計算・再計算したShotLabのバージョン。設定は対応するmetadata JSONを参照。,文字列,なし,
+phases.csv,player_id,選手ID,利用者が入力する選手の識別子。PCAの数値特徴には入れない。,文字列,空欄＝未設定,
+phases.csv,session_id,測定ID,利用者が入力する撮影日・セッションの識別子。,文字列,空欄＝未設定,
+phases.csv,shooting_hand,シュートする手,right＝右、left＝左、unknown＝未設定。PCA候補のshooting_*列が参照する身体側。左右の値はそれ以外のCSVでは反転しない。,カテゴリ,空欄＝値なし／計算不可,
+phases.csv,shot_id,シュートID,対象のシュート区間の識別番号。追加・削除後も既存IDを維持。,番号,空欄＝シュート区間外,
+phases.csv,phase,動作区分,setup＝セット、drive＝上昇開始～リリース前、follow_through＝リリース～区間終了、other＝区間外。,カテゴリ,なし,指定した時刻に基づく区分。学習済み動作分類器の判定ではない。
+phases.csv,phase_start_s,局面開始時刻,setupはstart、driveはdrive、follow_throughはrelease。,s,空欄＝値なし／計算不可,
+phases.csv,phase_end_s,局面終了時刻,setupはdrive、driveはrelease、follow_throughはend。,s,空欄＝値なし／計算不可,
+phases.csv,phase_duration_s,局面の長さ,局面終了−局面開始。時間正規化で失われる速度情報を保持。,s,空欄＝値なし／計算不可,
+phases.csv,timing_reviewed,区間時刻の確認状態,確認済み＝1、未確認＝0。旧版のフレームCSVはtrue/false。,0/1,空欄＝区間外,
+phases.csv,n_phase_frames,局面のサンプル数,開始以上・終了未満。follow_throughのみ終了を含む。,個,空欄＝値なし／計算不可,
+phases.csv,left_elbow_deg_n_valid_phase,左肘の2D内角・有効点数,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_elbow_deg_mean_phase,左肘の2D内角・平均,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_elbow_deg_median_phase,左肘の2D内角・中央値,phase_start以上phase_end未満（follow_throughのみ終了を含む）のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_elbow_deg_sd_phase,左肘の2D内角・標本標準偏差,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_elbow_deg_iqr_phase,左肘の2D内角・四分位範囲,phase_start以上phase_end未満（follow_throughのみ終了を含む）の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_elbow_deg_rom_phase,左肘の2D内角・可動域,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_elbow_deg_valid_fraction_phase,左肘の2D内角・有効割合,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効点数／区間内サンプル数。欠測は除外し、0に置換しない。,0–1,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_elbow_deg_n_valid_phase,右肘の2D内角・有効点数,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_elbow_deg_mean_phase,右肘の2D内角・平均,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_elbow_deg_median_phase,右肘の2D内角・中央値,phase_start以上phase_end未満（follow_throughのみ終了を含む）のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_elbow_deg_sd_phase,右肘の2D内角・標本標準偏差,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_elbow_deg_iqr_phase,右肘の2D内角・四分位範囲,phase_start以上phase_end未満（follow_throughのみ終了を含む）の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_elbow_deg_rom_phase,右肘の2D内角・可動域,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_elbow_deg_valid_fraction_phase,右肘の2D内角・有効割合,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効点数／区間内サンプル数。欠測は除外し、0に置換しない。,0–1,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_shoulder_deg_n_valid_phase,左肩の2D内角・有効点数,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_shoulder_deg_mean_phase,左肩の2D内角・平均,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_shoulder_deg_median_phase,左肩の2D内角・中央値,phase_start以上phase_end未満（follow_throughのみ終了を含む）のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_shoulder_deg_sd_phase,左肩の2D内角・標本標準偏差,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_shoulder_deg_iqr_phase,左肩の2D内角・四分位範囲,phase_start以上phase_end未満（follow_throughのみ終了を含む）の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_shoulder_deg_rom_phase,左肩の2D内角・可動域,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_shoulder_deg_valid_fraction_phase,左肩の2D内角・有効割合,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効点数／区間内サンプル数。欠測は除外し、0に置換しない。,0–1,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_shoulder_deg_n_valid_phase,右肩の2D内角・有効点数,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_shoulder_deg_mean_phase,右肩の2D内角・平均,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_shoulder_deg_median_phase,右肩の2D内角・中央値,phase_start以上phase_end未満（follow_throughのみ終了を含む）のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_shoulder_deg_sd_phase,右肩の2D内角・標本標準偏差,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_shoulder_deg_iqr_phase,右肩の2D内角・四分位範囲,phase_start以上phase_end未満（follow_throughのみ終了を含む）の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_shoulder_deg_rom_phase,右肩の2D内角・可動域,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_shoulder_deg_valid_fraction_phase,右肩の2D内角・有効割合,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効点数／区間内サンプル数。欠測は除外し、0に置換しない。,0–1,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_knee_deg_n_valid_phase,左膝の2D内角・有効点数,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_knee_deg_mean_phase,左膝の2D内角・平均,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_knee_deg_median_phase,左膝の2D内角・中央値,phase_start以上phase_end未満（follow_throughのみ終了を含む）のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_knee_deg_sd_phase,左膝の2D内角・標本標準偏差,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_knee_deg_iqr_phase,左膝の2D内角・四分位範囲,phase_start以上phase_end未満（follow_throughのみ終了を含む）の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_knee_deg_rom_phase,左膝の2D内角・可動域,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_knee_deg_valid_fraction_phase,左膝の2D内角・有効割合,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効点数／区間内サンプル数。欠測は除外し、0に置換しない。,0–1,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_knee_deg_n_valid_phase,右膝の2D内角・有効点数,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_knee_deg_mean_phase,右膝の2D内角・平均,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_knee_deg_median_phase,右膝の2D内角・中央値,phase_start以上phase_end未満（follow_throughのみ終了を含む）のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_knee_deg_sd_phase,右膝の2D内角・標本標準偏差,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_knee_deg_iqr_phase,右膝の2D内角・四分位範囲,phase_start以上phase_end未満（follow_throughのみ終了を含む）の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_knee_deg_rom_phase,右膝の2D内角・可動域,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_knee_deg_valid_fraction_phase,右膝の2D内角・有効割合,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効点数／区間内サンプル数。欠測は除外し、0に置換しない。,0–1,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_hip_deg_n_valid_phase,左股関節の2D内角・有効点数,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_hip_deg_mean_phase,左股関節の2D内角・平均,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_hip_deg_median_phase,左股関節の2D内角・中央値,phase_start以上phase_end未満（follow_throughのみ終了を含む）のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_hip_deg_sd_phase,左股関節の2D内角・標本標準偏差,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_hip_deg_iqr_phase,左股関節の2D内角・四分位範囲,phase_start以上phase_end未満（follow_throughのみ終了を含む）の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_hip_deg_rom_phase,左股関節の2D内角・可動域,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_hip_deg_valid_fraction_phase,左股関節の2D内角・有効割合,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効点数／区間内サンプル数。欠測は除外し、0に置換しない。,0–1,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_hip_deg_n_valid_phase,右股関節の2D内角・有効点数,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_hip_deg_mean_phase,右股関節の2D内角・平均,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_hip_deg_median_phase,右股関節の2D内角・中央値,phase_start以上phase_end未満（follow_throughのみ終了を含む）のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_hip_deg_sd_phase,右股関節の2D内角・標本標準偏差,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_hip_deg_iqr_phase,右股関節の2D内角・四分位範囲,phase_start以上phase_end未満（follow_throughのみ終了を含む）の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_hip_deg_rom_phase,右股関節の2D内角・可動域,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_hip_deg_valid_fraction_phase,右股関節の2D内角・有効割合,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効点数／区間内サンプル数。欠測は除外し、0に置換しない。,0–1,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_ankle_deg_n_valid_phase,左足首の2D内角・有効点数,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_ankle_deg_mean_phase,左足首の2D内角・平均,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_ankle_deg_median_phase,左足首の2D内角・中央値,phase_start以上phase_end未満（follow_throughのみ終了を含む）のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_ankle_deg_sd_phase,左足首の2D内角・標本標準偏差,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_ankle_deg_iqr_phase,左足首の2D内角・四分位範囲,phase_start以上phase_end未満（follow_throughのみ終了を含む）の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_ankle_deg_rom_phase,左足首の2D内角・可動域,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,left_ankle_deg_valid_fraction_phase,左足首の2D内角・有効割合,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効点数／区間内サンプル数。欠測は除外し、0に置換しない。,0–1,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_ankle_deg_n_valid_phase,右足首の2D内角・有効点数,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_ankle_deg_mean_phase,右足首の2D内角・平均,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_ankle_deg_median_phase,右足首の2D内角・中央値,phase_start以上phase_end未満（follow_throughのみ終了を含む）のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_ankle_deg_sd_phase,右足首の2D内角・標本標準偏差,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_ankle_deg_iqr_phase,右足首の2D内角・四分位範囲,phase_start以上phase_end未満（follow_throughのみ終了を含む）の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_ankle_deg_rom_phase,右足首の2D内角・可動域,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,right_ankle_deg_valid_fraction_phase,右足首の2D内角・有効割合,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効点数／区間内サンプル数。欠測は除外し、0に置換しない。,0–1,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,trunk_lean_deg_n_valid_phase,体幹の傾き・有効点数,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有限な有効値の数。欠測は除外し、0に置換しない。,個,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,trunk_lean_deg_mean_phase,体幹の傾き・平均,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,trunk_lean_deg_median_phase,体幹の傾き・中央値,phase_start以上phase_end未満（follow_throughのみ終了を含む）のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,trunk_lean_deg_sd_phase,体幹の傾き・標本標準偏差,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の偏差平方和をn−1で割った平方根（n≥2）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,trunk_lean_deg_iqr_phase,体幹の傾き・四分位範囲,phase_start以上phase_end未満（follow_throughのみ終了を含む）の75%点−25%点。分位点は(n−1)pの隣接順位を線形補間。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,trunk_lean_deg_rom_phase,体幹の傾き・可動域,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+phases.csv,trunk_lean_deg_valid_fraction_phase,体幹の傾き・有効割合,phase_start以上phase_end未満（follow_throughのみ終了を含む）の有効点数／区間内サンプル数。欠測は除外し、0に置換しない。,0–1,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。
+waveforms.csv,source_sha256,動画識別SHA-256,解析元動画のSHA-256。複数CSVの対応確認に使う。,文字列,空欄＝旧版などで未記録,
+waveforms.csv,app_version,処理アプリのバージョン,特徴量を計算・再計算したShotLabのバージョン。設定は対応するmetadata JSONを参照。,文字列,なし,
+waveforms.csv,player_id,選手ID,利用者が入力する選手の識別子。PCAの数値特徴には入れない。,文字列,空欄＝未設定,
+waveforms.csv,session_id,測定ID,利用者が入力する撮影日・セッションの識別子。,文字列,空欄＝未設定,
+waveforms.csv,shooting_hand,シュートする手,right＝右、left＝左、unknown＝未設定。PCA候補のshooting_*列が参照する身体側。左右の値はそれ以外のCSVでは反転しない。,カテゴリ,空欄＝値なし／計算不可,
+waveforms.csv,shot_id,シュートID,対象のシュート区間の識別番号。追加・削除後も既存IDを維持。,番号,空欄＝シュート区間外,
+waveforms.csv,phase,動作区分,setup＝セット、drive＝上昇開始～リリース前、follow_through＝リリース～区間終了、other＝区間外。,カテゴリ,なし,指定した時刻に基づく区分。学習済み動作分類器の判定ではない。
+waveforms.csv,phase_percent,局面内の正規化時刻,局面ごとに開始0%、終了100%の等間隔51点（設定で変更）。局面の境界は隣接する2局面の両端に現れる。,%,空欄＝値なし／計算不可,
+waveforms.csv,source_t_s,元の動画時刻,正規化時刻に対応する元動画の時刻。実フレーム間では局所的な線形補間。,s,空欄＝値なし／計算不可,
+waveforms.csv,phase_duration_s,局面の長さ,局面終了−局面開始。時間正規化で失われる速度情報を保持。,s,空欄＝値なし／計算不可,
+waveforms.csv,timing_reviewed,区間時刻の確認状態,確認済み＝1、未確認＝0。旧版のフレームCSVはtrue/false。,0/1,空欄＝区間外,
+waveforms.csv,left_elbow_deg,左肘の2D内角,肩→肘→手首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+waveforms.csv,left_elbow_deg_sample_source,波形値の由来,sample＝元の有効サンプル、linear_interpolation＝隣接有効点の線形補間、missing＝欠測。間隔が0.12秒（設定値）を超える補間・端外挿はしない。,カテゴリ,空欄＝値なし／計算不可,
+waveforms.csv,right_elbow_deg,右肘の2D内角,肩→肘→手首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+waveforms.csv,right_elbow_deg_sample_source,波形値の由来,sample＝元の有効サンプル、linear_interpolation＝隣接有効点の線形補間、missing＝欠測。間隔が0.12秒（設定値）を超える補間・端外挿はしない。,カテゴリ,空欄＝値なし／計算不可,
+waveforms.csv,left_shoulder_deg,左肩の2D内角,股→肩→肘の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+waveforms.csv,left_shoulder_deg_sample_source,波形値の由来,sample＝元の有効サンプル、linear_interpolation＝隣接有効点の線形補間、missing＝欠測。間隔が0.12秒（設定値）を超える補間・端外挿はしない。,カテゴリ,空欄＝値なし／計算不可,
+waveforms.csv,right_shoulder_deg,右肩の2D内角,股→肩→肘の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+waveforms.csv,right_shoulder_deg_sample_source,波形値の由来,sample＝元の有効サンプル、linear_interpolation＝隣接有効点の線形補間、missing＝欠測。間隔が0.12秒（設定値）を超える補間・端外挿はしない。,カテゴリ,空欄＝値なし／計算不可,
+waveforms.csv,left_knee_deg,左膝の2D内角,股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+waveforms.csv,left_knee_deg_sample_source,波形値の由来,sample＝元の有効サンプル、linear_interpolation＝隣接有効点の線形補間、missing＝欠測。間隔が0.12秒（設定値）を超える補間・端外挿はしない。,カテゴリ,空欄＝値なし／計算不可,
+waveforms.csv,right_knee_deg,右膝の2D内角,股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+waveforms.csv,right_knee_deg_sample_source,波形値の由来,sample＝元の有効サンプル、linear_interpolation＝隣接有効点の線形補間、missing＝欠測。間隔が0.12秒（設定値）を超える補間・端外挿はしない。,カテゴリ,空欄＝値なし／計算不可,
+waveforms.csv,left_hip_deg,左股関節の2D内角,肩→股→膝の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+waveforms.csv,left_hip_deg_sample_source,波形値の由来,sample＝元の有効サンプル、linear_interpolation＝隣接有効点の線形補間、missing＝欠測。間隔が0.12秒（設定値）を超える補間・端外挿はしない。,カテゴリ,空欄＝値なし／計算不可,
+waveforms.csv,right_hip_deg,右股関節の2D内角,肩→股→膝の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。
+waveforms.csv,right_hip_deg_sample_source,波形値の由来,sample＝元の有効サンプル、linear_interpolation＝隣接有効点の線形補間、missing＝欠測。間隔が0.12秒（設定値）を超える補間・端外挿はしない。,カテゴリ,空欄＝値なし／計算不可,
+waveforms.csv,left_ankle_deg,左足首の2D内角,膝→足首→足先の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,臨床的な足関節背屈角ではない。
+waveforms.csv,left_ankle_deg_sample_source,波形値の由来,sample＝元の有効サンプル、linear_interpolation＝隣接有効点の線形補間、missing＝欠測。間隔が0.12秒（設定値）を超える補間・端外挿はしない。,カテゴリ,空欄＝値なし／計算不可,
+waveforms.csv,right_ankle_deg,右足首の2D内角,膝→足首→足先の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,臨床的な足関節背屈角ではない。
+waveforms.csv,right_ankle_deg_sample_source,波形値の由来,sample＝元の有効サンプル、linear_interpolation＝隣接有効点の線形補間、missing＝欠測。間隔が0.12秒（設定値）を超える補間・端外挿はしない。,カテゴリ,空欄＝値なし／計算不可,
+waveforms.csv,trunk_lean_deg,体幹の傾き,両股中点から両肩中点へ向かう線と、画像の上向き鉛直との符号付き角度。画像右への傾きが正。,deg,空欄＝肩・股のいずれかの可視性不足／未検出,
+waveforms.csv,trunk_lean_deg_sample_source,波形値の由来,sample＝元の有効サンプル、linear_interpolation＝隣接有効点の線形補間、missing＝欠測。間隔が0.12秒（設定値）を超える補間・端外挿はしない。,カテゴリ,空欄＝値なし／計算不可,
+pca.csv,source_sha256,動画識別SHA-256,解析元動画のSHA-256。複数CSVの対応確認に使う。,文字列,空欄＝旧版などで未記録,
+pca.csv,app_version,処理アプリのバージョン,特徴量を計算・再計算したShotLabのバージョン。設定は対応するmetadata JSONを参照。,文字列,なし,
+pca.csv,player_id,選手ID,利用者が入力する選手の識別子。PCAの数値特徴には入れない。,文字列,空欄＝未設定,
+pca.csv,session_id,測定ID,利用者が入力する撮影日・セッションの識別子。,文字列,空欄＝未設定,
+pca.csv,shooting_hand,シュートする手,right＝右、left＝左、unknown＝未設定。PCA候補のshooting_*列が参照する身体側。左右の値はそれ以外のCSVでは反転しない。,カテゴリ,空欄＝値なし／計算不可,
+pca.csv,shot_id,シュートID,対象のシュート区間の識別番号。追加・削除後も既存IDを維持。,番号,空欄＝シュート区間外,
+pca.csv,timing_reviewed,区間時刻の確認状態,確認済み＝1、未確認＝0。旧版のフレームCSVはtrue/false。,0/1,空欄＝区間外,
+pca.csv,success,シュート結果（目的変数）,成功＝1、失敗＝0。,0/1,空欄＝未確認。0に置換しない。,
+pca.csv,shooting_elbow_deg_at_release,シュートする側肘の2D内角・リリース時,shooting_handで指定した身体側。 リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 肩→肘→手首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。 身体の左右をそろえたPCA候補。
+pca.csv,shooting_shoulder_deg_at_release,シュートする側肩の2D内角・リリース時,shooting_handで指定した身体側。 リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 股→肩→肘の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。 身体の左右をそろえたPCA候補。
+pca.csv,shooting_knee_deg_min_pre,シュートする側膝の2D内角・リリース前最小,shooting_handで指定した身体側。 セット開始以上、リリース以下の有効値の最小。 股→膝→足首の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。 身体の左右をそろえたPCA候補。
+pca.csv,shooting_hip_deg_min_pre,シュートする側股関節の2D内角・リリース前最小,shooting_handで指定した身体側。 セット開始以上、リリース以下の有効値の最小。 肩→股→膝の中央点を頂点とする内角。画像幅・高さを掛けた座標から算出。,deg,空欄＝可視性不足／未検出／計算不可,肘・膝の伸展は約180度。左右は身体の左右。 身体の左右をそろえたPCA候補。
+pca.csv,trunk_lean_deg_at_release,体幹の傾き・リリース時,リリース時刻を超えない直近フレームの値。0.16秒を超えて離れた場合は欠測。 両股中点から両肩中点へ向かう線と、画像の上向き鉛直との符号付き角度。画像右への傾きが正。,deg,空欄＝肩・股のいずれかの可視性不足／未検出,
+pca.csv,shooting_elbow_deg_mean_drive,シュートする側肘の2D内角・平均,shooting_handで指定した身体側。 drive以上release未満の有効サンプルの算術平均（時間加重なし）。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。 身体の左右をそろえたPCA候補。
+pca.csv,shooting_knee_deg_median_setup,シュートする側膝の2D内角・中央値,shooting_handで指定した身体側。 start以上drive未満のソートした有効値の50%点。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。 身体の左右をそろえたPCA候補。
+pca.csv,shooting_elbow_deg_rom_pre,シュートする側肘の2D内角・可動域,shooting_handで指定した身体側。 start以上release以下の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。 身体の左右をそろえたPCA候補。
+pca.csv,shooting_knee_deg_rom_pre,シュートする側膝の2D内角・可動域,shooting_handで指定した身体側。 start以上release以下の有効値の最大−最小。欠測は除外し、0に置換しない。,deg,空欄＝有効値なし／SDは2点未満,記述統計は低い有効割合でも出るため割合と併読。PCA候補では品質条件を別適用。 身体の左右をそろえたPCA候補。
+pca.csv,drive_duration_s,シュート動作時間,release_s−drive_s。構え・飛行時間を含まない。,s,空欄＝値なし／計算不可,
+pca.csv,feature_min_valid_fraction,PCA集計特徴の最小有効割合,PCA候補の集計特徴に使った各区間・関節の有効割合の最小。リリース単点と時間は含めない。,0–1,空欄＝値なし／計算不可,
+pca.csv,pca_ready,PCA候補行の基本条件,選手ID・シュートする手・確認済み区間があり、10特徴が有限でdrive時間が正なら1。それ以外0。集計特徴には有効割合0.8以上・有効3点以上（設定値）を要求。,0/1,なし,測定の正確さやPCAの適切性を保証しない。

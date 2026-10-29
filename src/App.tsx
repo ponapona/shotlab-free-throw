@@ -53,6 +53,11 @@ import {
   validateShots,
 } from "../public/engine.mjs";
 import { sha256 } from "../public/file-hash.mjs";
+import {
+  phaseRows,
+  waveformRows,
+  pcaRows,
+} from "../public/shot-statistics.mjs";
 import BallTrajectory from "./BallTrajectory";
 import { ballRows } from "../public/ball-tracking.mjs";
 import { correctBallistics } from "../public/ballistics.mjs";
@@ -79,8 +84,11 @@ function download(name, content, type = "text/csv;charset=utf-8") {
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 function Choice({ value, onChange, options, label, className = "" }) {
   return (
@@ -275,6 +283,7 @@ function Wave({
                     interpolated: "欠測を放物線で補間",
                     outside_flight: "飛行区間外・補正なし",
                     unavailable: "補正値なし",
+                    assumption_based: "仮定点を含む軌道推定",
                   }[point.f.ball_correction_status]
                 }
               </small>
@@ -404,6 +413,10 @@ export default function Home() {
     [bodyOnly, setBodyOnly] = useState(true),
     [ballOverlay, setBallOverlay] = useState(true),
     [ballEditing, setBallEditing] = useState(false),
+    [ballPointKind, setBallPointKind] = useState("point"),
+    [ballBusy, setBallBusy] = useState(false),
+    [ballProgress, setBallProgress] = useState(""),
+    [sourceFile, setSourceFile] = useState(null),
     [importOpen, setImportOpen] = useState(false),
     [exportOpen, setExportOpen] = useState(false),
     [helpOpen, setHelpOpen] = useState(false),
@@ -647,6 +660,7 @@ export default function Home() {
         },
       });
       setData(d);
+      setSourceFile(file);
       setError("");
       setBallEditing(false);
       setShots(d.shots);
@@ -717,13 +731,19 @@ export default function Home() {
       );
     } else {
       const rows =
-        kind === "ball"
-          ? ballRows(data, shots)
-          : kind === "frames"
-            ? frameRows(data, shots)
-            : kind === "shots"
-              ? shotRows(data, shots)
-              : landmarkRows(data, { bodyOnly: kind === "body" });
+        kind === "phases"
+          ? phaseRows(data, shots)
+          : kind === "waveforms"
+            ? waveformRows(data, shots)
+            : kind === "pca"
+              ? pcaRows(data, shots)
+              : kind === "ball"
+                ? ballRows(data, shots)
+                : kind === "frames"
+                  ? frameRows(data, shots)
+                  : kind === "shots"
+                    ? shotRows(data, shots)
+                    : landmarkRows(data, { bodyOnly: kind === "body" });
       const table = kind === "body" ? "landmarks" : kind;
       download(
         name + "_" + kind + ".csv",
@@ -762,6 +782,7 @@ export default function Home() {
       validateShots(d.shots, d.meta.duration);
       enrich(d);
       setData(d);
+      if (source) setSourceFile(source);
       setError("");
       setBallEditing(false);
       setShots(d.shots);
@@ -846,10 +867,50 @@ export default function Home() {
     if (!ballEditing || playing || !frame) return;
     const rect = e.currentTarget.getBoundingClientRect();
     updateBall({
-      kind: "point",
+      kind: ballPointKind,
       x: ((e.clientX - rect.left) / rect.width) * data.meta.width,
       y: ((e.clientY - rect.top) / rect.height) * data.meta.height,
     });
+  };
+  const rerunBall = async () => {
+    if (!sourceFile || !data || ballBusy) return;
+    video.current?.pause();
+    setBallBusy(true);
+    try {
+      const d = {
+        ...data,
+        meta: { ...data.meta },
+        shots,
+        frames: data.frames.map((f) => ({ ...f, f: { ...f.f } })),
+      };
+      const { analyzeBall } = await import(
+        /* @vite-ignore */ new URL("ball-analyzer.mjs", document.baseURI).href
+      );
+      await analyzeBall(sourceFile, d, {
+        roi: data.meta.ball_detection?.roi ?? [0, 0, 1, 1],
+        motionOnly: true,
+        onProgress: (p, text) =>
+          setBallProgress(`${Math.round(p * 100)}% · ${text}`),
+      });
+      setData(d);
+      toast.success(
+        "動きからボール候補を再抽出しました。軌道を映像と照合してください。",
+      );
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setBallBusy(false);
+      setBallProgress("");
+    }
+  };
+  const beginReconstruction = () => {
+    if (!selectedShot) return;
+    video.current?.pause();
+    setBallEditing(true);
+    setBallOverlay(true);
+    setBallPointKind("point");
+    const f = data.frames.find((f) => f.t >= selectedShot.release);
+    seek((f?.t ?? selectedShot.release) + 0.001);
   };
   const startBallEdit = () => {
     video.current?.pause();
@@ -1100,13 +1161,56 @@ export default function Home() {
                   >
                     軌道 CSV
                   </button>
+                  <button
+                    className="button small primary"
+                    disabled={!selectedShot || ballBusy}
+                    onClick={beginReconstruction}
+                  >
+                    3点から軌道を復元
+                  </button>
+                  <button
+                    className="button small"
+                    disabled={!sourceFile || ballBusy}
+                    onClick={rerunBall}
+                  >
+                    {ballBusy ? "抽出中…" : "動きからボールを再検出"}
+                  </button>
                 </div>
+                <p>
+                  シュートを選び、手離れ直後・飛行中・リング接触前の3時刻で位置を指定すると、その間を放物線で補います。1時刻に1点、時刻を十分離して指定してください。
+                </p>
+                {ballBusy && <p role="status">{ballProgress}</p>}
                 {ballEditing && (
                   <>
                     <p>
-                      一時停止中の映像でボールの中心をクリック。前後のフレームへ進めて修正します。見えないときは欠測にします。
+                      前後のフレームや再生バーで時刻を選び、一時停止中の映像をクリック。見えているボールは「観測点」、見えない位置を推測して置く場合は「仮定点」を選びます。3点は同じ飛行区間の中で指定してください。
                     </p>
                     <div className="ball-edit-actions">
+                      <label>
+                        点の種類{" "}
+                        <select
+                          aria-label="ボール点の種類"
+                          value={ballPointKind}
+                          onChange={(e) => setBallPointKind(e.target.value)}
+                        >
+                          <option value="point">観測点：ボールが見える</option>
+                          <option value="assumed">
+                            仮定点：位置を推測して置く
+                          </option>
+                        </select>
+                      </label>
+                      <button
+                        className="button small"
+                        onClick={() => stepFrame(-1)}
+                      >
+                        1フレーム前
+                      </button>
+                      <button
+                        className="button small"
+                        onClick={() => stepFrame(1)}
+                      >
+                        1フレーム後
+                      </button>
                       <button
                         className="button small"
                         onClick={() => updateBall({ kind: "missing" })}
@@ -1125,13 +1229,15 @@ export default function Home() {
                   </>
                 )}
                 <p className="ball-status" role="status">
-                  {frame?.ball_edit?.kind === "missing"
-                    ? "現在の点：手動で欠測に指定"
-                    : frame?.ball?.source === "manual"
-                      ? "現在の点：手修正"
-                      : frame?.ball
-                        ? "現在の点：自動検出候補（要確認）"
-                        : "現在の点：欠測"}
+                  {frame?.ball_edit?.kind === "assumed"
+                    ? "現在の点：位置を仮定（観測ではありません）"
+                    : frame?.ball_edit?.kind === "missing"
+                      ? "現在の点：手動で欠測に指定"
+                      : frame?.ball?.source === "manual"
+                        ? "現在の点：手修正"
+                        : frame?.ball
+                          ? "現在の点：自動検出候補（要確認）"
+                          : "現在の点：欠測"}
                 </p>
                 {data.meta.ball_detection?.status === "error" && (
                   <p className="import-error" role="alert">
@@ -1622,7 +1728,7 @@ export default function Home() {
                 ボールも自動検出する
               </label>
               <p className="helper-text">
-                身体は33点を推定し、主要16点だけのCSVも保存できます。ボールは別モデルで追跡するため処理時間が増えます。小さい球・遮蔽・複数の球には誤検出や欠測があり、解析後に手修正できます。まず5〜10秒の動画でお試しください。
+                身体は33点を推定し、主要16点だけのCSVも保存できます。ボールはAIと画像の動きから検出するため処理時間が増えます。小さい球・遮蔽・複数の球には誤検出や欠測があり、解析後に手修正できます。まず5〜10秒の動画でお試しください。
               </p>
               {busy && (
                 <div className="import-progress">
@@ -1677,12 +1783,80 @@ export default function Home() {
               未確認の結果と低可視性の関節角度は空欄です。
             </DialogDescription>
           </DialogHeader>
+          {data && (
+            <div className="analysis-identity">
+              <label>
+                選手ID（例：P01）
+                <input
+                  aria-label="選手ID"
+                  value={sourceData.meta.player_id ?? ""}
+                  onChange={(e) =>
+                    setData((prev) => ({
+                      ...prev,
+                      meta: { ...prev.meta, player_id: e.target.value },
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                測定ID（例：2026-10-28-A）
+                <input
+                  aria-label="測定ID"
+                  value={sourceData.meta.session_id ?? ""}
+                  onChange={(e) =>
+                    setData((prev) => ({
+                      ...prev,
+                      meta: { ...prev.meta, session_id: e.target.value },
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                シュートする手
+                <select
+                  aria-label="シュートする手"
+                  value={sourceData.meta.shooting_hand ?? "unknown"}
+                  onChange={(e) =>
+                    setData((prev) => ({
+                      ...prev,
+                      meta: { ...prev.meta, shooting_hand: e.target.value },
+                    }))
+                  }
+                >
+                  <option value="unknown">未設定</option>
+                  <option value="right">右手</option>
+                  <option value="left">左手</option>
+                </select>
+              </label>
+              <small>
+                PCA候補CSVは選手ID・シュートする手・投区間の確認が必要です。全データとセッションにも保存します。
+              </small>
+            </div>
+          )}
           <div className="export-options">
             {[
               [
                 "shots",
                 "シュート単位 CSV",
-                "1行＝1投。結果・身体特徴量・ボール補正係数。",
+                "1行＝1投。平均・中央値・SD・IQR・最小最大・可動域・リリース角・軌道係数。",
+                Activity,
+              ],
+              [
+                "pca",
+                "PCA候補 CSV",
+                "シュートする側をそろえた10特徴量。ID・確認状態を含む。PCA計算前の入力候補。",
+                Activity,
+              ],
+              [
+                "phases",
+                "局面別の統計 CSV",
+                "セット・シュート動作・リリース後の平均・中央値・SD・IQR・有効割合。",
+                Activity,
+              ],
+              [
+                "waveforms",
+                "時間をそろえた波形 CSV",
+                "各局面を0〜100%の51点へ。長い欠測は埋めず、補間した値を明示。",
                 Activity,
               ],
               [
@@ -1850,8 +2024,7 @@ export default function Home() {
             </p>
             <h3>結果・区間・ボール</h3>
             <p>
-              successは成功1、失敗0、未確認は空欄。新規動画の区間は姿勢からの候補なので、離手時刻などを確認してください。ボールはEfficientDet-Lite2のsports
-              ball候補を追跡します。複数候補や見失った点は欠測にし、手修正できます。灰は自動候補、緑は手修正、橙の破線は放物線です。元の検出結果は保存します。放物線は飛行区間全体を使う事後推定で、観測不足なら表示しません。接触の判定はヒューリスティックで確認が必要です。小球・遮蔽・複数の球の精度は未検証です。
+              successは成功1、失敗0、未確認は空欄。区間は姿勢からの候補なので離手時刻を確認してください。ボールはAIと固定カメラの背景差分から候補を探し、放物線へつなぎます。自動検出がなくても「3点から軌道を復元」で異なる3時刻の点を指定できます。緑は見える球の手動観測、紫は見えない位置の仮定、橙の破線は事後推定です。仮定点を使った曲線全体には印が付きます。元の自動候補は保持します。接触前の範囲で指定し、曲線を映像と照合してください。基準位置との精度は未検証です。
             </p>
             <h3>精度を検証するには</h3>
             <p>

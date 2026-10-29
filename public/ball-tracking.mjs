@@ -29,6 +29,15 @@ export const BALL_COLUMNS = [
   "ball_fit_residual_px",
   "ball_fit_rmse_px",
   "ball_fit_available_at_s",
+  "ball_fit_basis",
+  "ball_fit_n_assumed",
+  "ball_fit_quality",
+  "ball_assumed_x_px",
+  "ball_assumed_y_px",
+  "ball_candidate_recovered",
+  "player_id",
+  "session_id",
+  "shooting_hand",
 ];
 
 export function detectionCandidates(
@@ -151,9 +160,9 @@ export function applyBallEdits(data) {
   for (const f of data.frames) {
     if (!has(f, "ball_auto")) f.ball_auto = f.ball ? { ...f.ball } : null;
     const e = f.ball_edit;
-    if (e && !["point", "missing"].includes(e.kind))
+    if (e && !["point", "assumed", "missing"].includes(e.kind))
       throw new Error("不正なボール修正です。");
-    if (e?.kind === "point") {
+    if (["point", "assumed"].includes(e?.kind)) {
       if (
         !finite(e.x) ||
         !finite(e.y) ||
@@ -163,13 +172,16 @@ export function applyBallEdits(data) {
         e.y > height
       )
         throw new Error("ボールの修正座標が動画の範囲外です。");
-      f.ball = {
-        x: e.x,
-        y: e.y,
-        confidence: null,
-        source: "manual",
-        status: "human_annotation",
-      };
+      f.ball =
+        e.kind === "assumed"
+          ? null
+          : {
+              x: e.x,
+              y: e.y,
+              confidence: null,
+              source: "manual",
+              status: "human_annotation",
+            };
     } else
       f.ball =
         e?.kind === "missing" ? null : f.ball_auto ? { ...f.ball_auto } : null;
@@ -208,6 +220,14 @@ export function ballRows(data, shots = data.shots ?? []) {
       ball_y_norm: finite(f.ball?.y) ? f.ball.y / data.meta.height : null,
     };
     for (const k of BALL_COLUMNS.slice(19)) row[k] = f.f?.[k] ?? null;
+    Object.assign(row, {
+      ball_assumed_x_px: f.ball_edit?.kind === "assumed" ? f.ball_edit.x : null,
+      ball_assumed_y_px: f.ball_edit?.kind === "assumed" ? f.ball_edit.y : null,
+      ball_candidate_recovered: Number(!!f.ball_recovered),
+      player_id: data.meta.player_id ?? "",
+      session_id: data.meta.session_id ?? "",
+      shooting_hand: data.meta.shooting_hand ?? "unknown",
+    });
     return row;
   });
 }

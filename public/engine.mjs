@@ -1,5 +1,6 @@
 /** Shared deterministic analysis core. No labels enter feature calculations. */
 import { SETTINGS } from "./settings.mjs";
+import { SHOT_METRICS, statistics, identity } from "./shot-statistics.mjs";
 import { correctBallistics } from "./ballistics.mjs";
 export const CONNECTIONS = [
   [0, 1],
@@ -209,10 +210,7 @@ export function validateSession(data) {
   }
   return data;
 }
-const provenance = (data) => ({
-  source_sha256: data.meta.source_sha256 ?? null,
-  app_version: data.meta.processing_version ?? SETTINGS.app_version,
-});
+const provenance = identity;
 export function enrich(data) {
   validateSession(data);
   const { width: w, height: h } = data.meta;
@@ -221,6 +219,13 @@ export function enrich(data) {
   data.meta.app_version ??= config.app_version;
   data.meta.processing_version = SETTINGS.app_version;
   data.meta.accuracy_validated = false;
+  data.meta.feature_processing = {
+    method: "sample_statistics_and_phase_waveforms_v1",
+    settings: { ...SETTINGS.features, ...config.features },
+    quantiles: "linear interpolation at (n-1)*p",
+    sd: "sample standard deviation, n-1",
+    weights: "equal valid samples",
+  };
   const threshold = config.confidence.landmark;
   const filters = Array.from({ length: 33 }, () => [
     new Euro(config.filter),
@@ -414,18 +419,10 @@ export function shotRows(data, shots) {
       n_pre_release_frames: pre.length,
       note: s.note ?? "",
     };
-    for (const k of [
-      "left_knee_deg",
-      "right_knee_deg",
-      "left_elbow_deg",
-      "right_elbow_deg",
-      "left_hip_deg",
-      "right_hip_deg",
-      "left_ankle_deg",
-      "right_ankle_deg",
-      "trunk_lean_deg",
-    ]) {
+    for (const k of SHOT_METRICS) {
       const vals = pre.map((f) => f.f[k]).filter(finite);
+      for (const [stat, value] of Object.entries(statistics(vals)))
+        r[k + "_" + stat + "_pre"] = value;
       r[k + "_min_pre"] = vals.length ? round(Math.min(...vals)) : null;
       r[k + "_max_pre"] = vals.length ? round(Math.max(...vals)) : null;
       r[k + "_at_release"] = near?.f[k] ?? null;
@@ -441,6 +438,10 @@ export function shotRows(data, shots) {
     const fit = data.ball_fits?.find((f) => f.shot_id === s.id),
       ok = fit?.status === "fitted";
     Object.assign(r, {
+      ball_fit_basis: fit?.basis ?? null,
+      ball_fit_n_manual: fit?.n_manual ?? 0,
+      ball_fit_n_assumed: fit?.n_assumed ?? 0,
+      ball_fit_quality: fit?.quality ?? null,
       ball_fit_status: fit?.status ?? "unavailable",
       ball_fit_start_s: ok ? fit.start_s : null,
       ball_fit_end_s: ok ? fit.end_s : null,

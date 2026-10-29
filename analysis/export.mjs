@@ -2,6 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { dictionaryRows } from "../public/dictionary.mjs";
 import { correctBallistics } from "../public/ballistics.mjs";
+import {
+  phaseRows,
+  waveformRows,
+  pcaRows,
+} from "../public/shot-statistics.mjs";
 import { ballRows } from "../public/ball-tracking.mjs";
 import {
   enrich,
@@ -27,6 +32,9 @@ for (const [name, rows] of [
   ["landmarks", landmarkRows(d)],
   ["body", landmarkRows(d, { bodyOnly: true })],
   ["ball", ballRows(d, d.shots)],
+  ["phases", phaseRows(d)],
+  ["waveforms", waveformRows(d)],
+  ["pca", pcaRows(d)],
 ]) {
   fs.writeFileSync(
     path.join(out, name + ".csv"),
